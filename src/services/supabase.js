@@ -12,8 +12,9 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 export function subscribeToHeartNotes(onNotesUpdated) {
   fetchHeartNotes().then(onNotesUpdated);
 
+  const channelId = 'heart-notes-' + Math.random().toString(36).substring(2, 9);
   const channel = supabase
-    .channel('public:heart_notes')
+    .channel(channelId)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'heart_notes' }, () => {
       fetchHeartNotes().then(onNotesUpdated);
     })
@@ -66,8 +67,9 @@ export async function deleteHeartNoteFromSupabase(noteId) {
 export function subscribeToGarden(onGardenUpdated) {
   fetchGarden().then(onGardenUpdated);
 
+  const channelId = 'garden-' + Math.random().toString(36).substring(2, 9);
   const channel = supabase
-    .channel('public:garden_items')
+    .channel(channelId)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_items' }, () => {
       fetchGarden().then(onGardenUpdated);
     })
@@ -114,8 +116,9 @@ export async function deleteGardenItemFromSupabase(itemId) {
 export function subscribeToLetters(onLettersUpdated) {
   fetchLetters().then(onLettersUpdated);
 
+  const channelId = 'letters-' + Math.random().toString(36).substring(2, 9);
   const channel = supabase
-    .channel('public:letters')
+    .channel(channelId)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'letters' }, () => {
       fetchLetters().then(onLettersUpdated);
     })
@@ -162,8 +165,9 @@ export async function deleteLetterFromSupabase(letterId) {
 export function subscribeToPartnerMoods(onMoodsUpdated) {
   fetchPartnerMoods().then(onMoodsUpdated);
 
+  const channelId = 'moods-' + Math.random().toString(36).substring(2, 9);
   const channel = supabase
-    .channel('public:partner_moods')
+    .channel(channelId)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_items' }, () => {
       fetchPartnerMoods().then(onMoodsUpdated);
     })
@@ -218,8 +222,9 @@ export async function updatePartnerMoodInSupabase(partner, moodEmoji, moodNote) 
 export function subscribeToPlaylist(onPlaylistUpdated) {
   fetchPlaylist().then(onPlaylistUpdated);
 
+  const channelId = 'playlist-' + Math.random().toString(36).substring(2, 9);
   const channel = supabase
-    .channel('public:playlist')
+    .channel(channelId)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_items' }, () => {
       fetchPlaylist().then(onPlaylistUpdated);
     })
