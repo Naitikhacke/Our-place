@@ -1,0 +1,3 @@
+- [x] Downgrade Gradle version in `gradle-wrapper.properties`
+- [x] Downgrade AGP and Kotlin versions in `settings.gradle.kts`
+- [/] Verify Gradle sync with `./gradlew help`
