@@ -3,42 +3,19 @@ import {
   Mail, 
   Lock, 
   Heart, 
-  ChevronRight, 
   X, 
   PenTool, 
-  Calendar, 
-  Clock, 
-  Sparkles, 
-  Archive, 
-  EyeOff, 
   Trash2,
-  Music,
-  Image as ImageIcon,
   Mic,
-  Smile,
-  Volume2,
-  Flower2,
-  RefreshCw
+  Image as ImageIcon,
+  Music,
+  Clock,
+  Sparkles
 } from 'lucide-react';
 import { subscribeToLetters, sendLetterToSupabase, deleteLetterFromSupabase } from '../services/supabase';
 import { playChime, playMagicBell } from '../utils/audio';
 
-// Helper to guarantee value is ALWAYS a primitive string so React JSX children NEVER crash
-const ensureString = (val, fallback = '') => {
-  if (val === null || val === undefined) return fallback;
-  if (typeof val === 'object') {
-    try {
-      if (val.text) return String(val.text);
-      if (val.title) return String(val.title);
-      return JSON.stringify(val);
-    } catch (e) {
-      return fallback;
-    }
-  }
-  return String(val);
-};
-
-// Safe Date Formatter to prevent any JS RangeError crashes during render
+// Safe date formatter
 const formatDateSafe = (dateVal) => {
   if (!dateVal) return 'Today';
   try {
@@ -60,7 +37,7 @@ export default function LettersScreen({ currentPartner = 'Naitik', theme = 'morn
   const [lockedLetterAlert, setLockedLetterAlert] = useState(null);
   const [isWriting, setIsWriting] = useState(false);
 
-  // Comprehensive Letter Form State
+  // Form State
   const [newTitle, setNewTitle] = useState('');
   const [newBody, setNewBody] = useState('');
   const [fontFamily, setFontFamily] = useState('Dancing Script');
@@ -89,14 +66,13 @@ export default function LettersScreen({ currentPartner = 'Naitik', theme = 'morn
   const stickerOptions = ['🌸 Rose', '🪻 Lavender', '🌾 Daisy', '🎀 Ribbon', '💌 Wax Seal'];
   const fontOptions = ['Dancing Script', 'Caveat', 'Sacramento', 'Playfair Display'];
 
-  // Clean real-time letters array
   const [letters, setLetters] = useState([]);
 
-  // Supabase real-time listener for letters
+  // Supabase real-time sync with local state fallback
   useEffect(() => {
     const unsub = subscribeToLetters((remoteLetters) => {
       if (remoteLetters && Array.isArray(remoteLetters)) {
-        setLetters(remoteLetters.map(l => {
+        const parsed = remoteLetters.map(l => {
           if (!l || typeof l !== 'object') return null;
 
           let parsedBody = '';
@@ -104,13 +80,13 @@ export default function LettersScreen({ currentPartner = 'Naitik', theme = 'morn
 
           if (l.body && typeof l.body === 'object') {
             meta = l.body;
-            parsedBody = ensureString(meta.text || meta.body || '');
+            parsedBody = String(meta.text || meta.body || '');
           } else if (typeof l.body === 'string') {
             const rawStr = l.body.trim();
             if (rawStr.startsWith('{') && rawStr.endsWith('}')) {
               try {
                 meta = JSON.parse(rawStr);
-                parsedBody = ensureString(meta.text || meta.body || rawStr);
+                parsedBody = String(meta.text || meta.body || rawStr);
               } catch (e) {
                 parsedBody = rawStr;
               }
@@ -118,7 +94,7 @@ export default function LettersScreen({ currentPartner = 'Naitik', theme = 'morn
               parsedBody = rawStr;
             }
           } else {
-            parsedBody = ensureString(l.body, '');
+            parsedBody = String(l.body || '');
           }
 
           let unlockTs = null;
@@ -130,23 +106,25 @@ export default function LettersScreen({ currentPartner = 'Naitik', theme = 'morn
           }
 
           return {
-            id: ensureString(l.id, Date.now().toString()),
-            author: ensureString(l.author, 'Naitik'),
-            recipient: ensureString(l.recipient, 'Raj'),
-            title: ensureString(l.title, 'Untitled Letter'),
+            id: String(l.id || Date.now().toString()),
+            author: String(l.author || 'Naitik'),
+            recipient: String(l.recipient || 'Raj'),
+            title: String(l.title || 'Untitled Letter'),
             body: parsedBody,
-            fontFamily: ensureString(meta.fontFamily, 'Dancing Script'),
-            mood: ensureString(meta.mood, '💖 Romantic'),
-            sticker: ensureString(meta.sticker, '🌸 Rose'),
-            photoUrl: ensureString(meta.photoUrl, ''),
-            voiceNote: ensureString(meta.voiceNote, ''),
-            songLink: ensureString(meta.songLink, ''),
-            color: ensureString(l.color || meta.color, '#FFD9D9'),
-            border: ensureString(l.border || meta.border, '#FFAAAA'),
+            fontFamily: String(meta.fontFamily || 'Dancing Script'),
+            mood: String(meta.mood || '💖 Romantic'),
+            sticker: String(meta.sticker || '🌸 Rose'),
+            photoUrl: String(meta.photoUrl || ''),
+            voiceNote: String(meta.voiceNote || ''),
+            songLink: String(meta.songLink || ''),
+            color: String(l.color || meta.color || '#FFD9D9'),
+            border: String(l.border || meta.border || '#FFAAAA'),
             createdDate: l.created_at || new Date().toISOString(),
             unlockTimestamp: unlockTs
           };
-        }).filter(Boolean));
+        }).filter(Boolean);
+
+        setLetters(parsed);
       }
     });
 
@@ -155,7 +133,7 @@ export default function LettersScreen({ currentPartner = 'Naitik', theme = 'morn
     };
   }, []);
 
-  const handleCreateLetter = () => {
+  const handleCreateLetter = async () => {
     if (!newTitle.trim() || !newBody.trim()) return;
     playMagicBell();
 
@@ -183,8 +161,9 @@ export default function LettersScreen({ currentPartner = 'Naitik', theme = 'morn
       border: selectedColorObj.border
     });
 
+    const newId = Date.now().toString();
     const newLetterItem = {
-      id: Date.now().toString(),
+      id: newId,
       author: currentPartner || 'Naitik',
       recipient: recipientName || 'Raj',
       title: newTitle,
@@ -195,7 +174,27 @@ export default function LettersScreen({ currentPartner = 'Naitik', theme = 'morn
       unlockTimestamp: targetTimestamp
     };
 
-    sendLetterToSupabase(newLetterItem);
+    // Instant local state update
+    const formattedLocalLetter = {
+      id: newId,
+      author: currentPartner || 'Naitik',
+      recipient: recipientName || 'Raj',
+      title: newTitle,
+      body: newBody,
+      fontFamily,
+      mood,
+      sticker,
+      photoUrl,
+      voiceNote,
+      songLink,
+      color: selectedColorObj.hex,
+      border: selectedColorObj.border,
+      createdDate: new Date().toISOString(),
+      unlockTimestamp: targetTimestamp
+    };
+
+    setLetters(prev => [formattedLocalLetter, ...prev]);
+    await sendLetterToSupabase(newLetterItem);
 
     // Reset Form
     setIsWriting(false);
@@ -207,9 +206,15 @@ export default function LettersScreen({ currentPartner = 'Naitik', theme = 'morn
     setLockType('anytime');
   };
 
+  // INSTANT REMOVAL FUNCTION
   const handleDeleteLetter = async (e, letterId, letterAuthor) => {
     e.stopPropagation();
     if (letterAuthor !== currentPartner) return;
+    
+    // 1. INSTANT LOCAL REMOVAL
+    setLetters(prev => prev.filter(l => l.id !== letterId));
+    
+    // 2. SUPABASE DB REMOVAL
     await deleteLetterFromSupabase(letterId);
   };
 
@@ -357,7 +362,7 @@ export default function LettersScreen({ currentPartner = 'Naitik', theme = 'morn
                 boxShadow: filter === f ? 'var(--shadow-sm)' : 'none'
               }}
             >
-              {f === 'All' ? 'All Letters 💌' : f === 'Today' ? 'Today\'s Letters 💌' : 'Past Archive 📁'}
+              {f === 'All' ? 'All Letters 💌' : f === 'Today' ? "Today's Letters 💌" : 'Past Archive 📁'}
             </button>
           ))}
         </div>
@@ -435,19 +440,19 @@ export default function LettersScreen({ currentPartner = 'Naitik', theme = 'morn
                       {today ? 'Today' : 'Archive'}
                     </span>
 
-                    {/* AUTHOR-ONLY DELETION BUTTON */}
+                    {/* AUTHOR-ONLY INSTANT DELETION BUTTON */}
                     {canDelete && (
                       <button
                         onClick={(e) => handleDeleteLetter(e, letter.id, letter.author)}
                         title={`Delete letter written by you (${currentPartner})`}
                         style={{
                           backgroundColor: '#FFF', border: 'none', borderRadius: '50%',
-                          width: '30px', height: '30px', color: '#EE7B7B', cursor: 'pointer',
+                          width: '32px', height: '32px', color: '#EE7B7B', cursor: 'pointer',
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
                           boxShadow: '0 2px 6px rgba(0,0,0,0.1)'
                         }}
                       >
-                        <Trash2 size={14} />
+                        <Trash2 size={15} />
                       </button>
                     )}
                   </div>
@@ -548,7 +553,7 @@ export default function LettersScreen({ currentPartner = 'Naitik', theme = 'morn
               />
             </div>
 
-            {/* 3. Mood & Cover Color Row */}
+            {/* 3. Mood & Sticker Row */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '16px' }}>
               <div>
                 <label style={{ fontSize: '11px', fontWeight: 700, color: '#8C7A7C' }}>MOOD SELECTION</label>
