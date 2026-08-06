@@ -22,7 +22,19 @@ import {
 import { subscribeToLetters, sendLetterToSupabase, deleteLetterFromSupabase } from '../services/supabase';
 import { playChime, playMagicBell } from '../utils/audio';
 
-export default function LettersScreen({ currentPartner, theme }) {
+// Safe Date Formatter to prevent any JS RangeError crashes during render
+const formatDateSafe = (dateVal) => {
+  if (!dateVal) return 'Today';
+  try {
+    const d = new Date(dateVal);
+    if (isNaN(d.getTime())) return 'Today';
+    return d.toLocaleDateString();
+  } catch (err) {
+    return 'Today';
+  }
+};
+
+export default function LettersScreen({ currentPartner = 'Naitik', theme = 'morning' }) {
   const isNight = theme === 'night';
   const recipientName = currentPartner === 'Naitik' ? 'Raj' : 'Naitik';
 
@@ -69,10 +81,9 @@ export default function LettersScreen({ currentPartner, theme }) {
     const unsub = subscribeToLetters((remoteLetters) => {
       if (remoteLetters && Array.isArray(remoteLetters)) {
         setLetters(remoteLetters.map(l => {
-          // Parse metadata stored in body string if JSON format or standard string
           let parsedBody = l.body || '';
           let meta = {};
-          if (parsedBody.startsWith('{') && parsedBody.endsWith('}')) {
+          if (typeof parsedBody === 'string' && parsedBody.startsWith('{') && parsedBody.endsWith('}')) {
             try {
               meta = JSON.parse(parsedBody);
               parsedBody = meta.text || '';
@@ -170,21 +181,29 @@ export default function LettersScreen({ currentPartner, theme }) {
 
   const isWrittenToday = (letter) => {
     if (!letter || !letter.createdDate) return true;
-    const created = new Date(letter.createdDate);
-    if (isNaN(created.getTime())) return true;
-    const today = new Date();
-    return created.getDate() === today.getDate() &&
-           created.getMonth() === today.getMonth() &&
-           created.getFullYear() === today.getFullYear();
+    try {
+      const created = new Date(letter.createdDate);
+      if (isNaN(created.getTime())) return true;
+      const today = new Date();
+      return created.getDate() === today.getDate() &&
+             created.getMonth() === today.getMonth() &&
+             created.getFullYear() === today.getFullYear();
+    } catch (err) {
+      return true;
+    }
   };
 
   const getUnlockStatusText = (letter) => {
     if (!letter || !letter.unlockTimestamp || isNaN(letter.unlockTimestamp) || Date.now() >= letter.unlockTimestamp) {
       return 'Open Anytime 🕊️';
     }
-    const d = new Date(letter.unlockTimestamp);
-    if (isNaN(d.getTime())) return 'Open Anytime 🕊️';
-    return `Sealed until ${d.toLocaleDateString()} at ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+    try {
+      const d = new Date(letter.unlockTimestamp);
+      if (isNaN(d.getTime())) return 'Open Anytime 🕊️';
+      return `Sealed until ${d.toLocaleDateString()} at ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+    } catch (err) {
+      return 'Open Anytime 🕊️';
+    }
   };
 
   const filteredLetters = letters.filter((letter) => {
@@ -203,7 +222,7 @@ export default function LettersScreen({ currentPartner, theme }) {
   };
 
   const getSpotifyEmbed = (url) => {
-    if (!url) return null;
+    if (!url || typeof url !== 'string') return null;
     if (url.includes('spotify.com/track/')) {
       const trackId = url.split('track/')[1]?.split('?')[0];
       if (trackId) return `https://open.spotify.com/embed/track/${trackId}`;
@@ -395,7 +414,7 @@ export default function LettersScreen({ currentPartner, theme }) {
                     <h3 style={{ fontSize: '18px', fontWeight: 700, color: '#3D2C2E' }}>
                       {unlocked ? letter.title : 'Sealed Letter 🗝️'}
                     </h3>
-                    <span style={{ fontSize: '12px' }}>{letter.mood?.split(' ')[0] || '💖'}</span>
+                    <span style={{ fontSize: '12px' }}>{typeof letter.mood === 'string' ? letter.mood.split(' ')[0] : '💖'}</span>
                   </div>
 
                   <p style={{ fontSize: '12px', color: '#5C4033' }}>
@@ -407,7 +426,7 @@ export default function LettersScreen({ currentPartner, theme }) {
                       {getUnlockStatusText(letter)}
                     </span>
                     <span style={{ fontSize: '10px', color: '#8C7A7C' }}>
-                      {new Date(letter.createdDate).toLocaleDateString()}
+                      {formatDateSafe(letter.createdDate)}
                     </span>
                   </div>
                 </div>
@@ -537,7 +556,7 @@ export default function LettersScreen({ currentPartner, theme }) {
               </div>
             </div>
 
-            {/* 5. Optional Media Attachments (Photo, Voice Note, Spotify Song) */}
+            {/* 5. Optional Media Attachments */}
             <div style={{ backgroundColor: '#FFF9F4', padding: '14px', borderRadius: '16px', border: '1px solid #E0D4C5', marginBottom: '16px' }}>
               <span style={{ fontSize: '11px', fontWeight: 700, color: '#8C7A7C', display: 'block', marginBottom: '8px' }}>
                 OPTIONAL ATTACHMENTS (PHOTO, VOICE NOTE, MUSIC)
@@ -726,7 +745,7 @@ export default function LettersScreen({ currentPartner, theme }) {
             </h2>
 
             <span style={{ fontSize: '11px', color: '#EE7B7B', fontWeight: 600, display: 'block', marginBottom: '16px' }}>
-              {selectedLetter.mood || '💖 Romantic'} • Written on {new Date(selectedLetter.createdDate).toLocaleDateString()}
+              {selectedLetter.mood || '💖 Romantic'} • Written on {formatDateSafe(selectedLetter.createdDate)}
             </span>
 
             {/* Letter Content in Selected Handwritten Font */}
