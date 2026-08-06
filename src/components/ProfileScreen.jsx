@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Home, Heart, Music, Calendar, ShieldCheck, ChevronRight, Edit3, X, Check } from 'lucide-react';
+import { Home, Heart, Music, Calendar, ChevronRight, Edit3, X, Check } from 'lucide-react';
 
 export default function ProfileScreen({
   theme,
@@ -9,9 +9,7 @@ export default function ProfileScreen({
   anniversaryDate,
   onUpdateAnniversary,
   favoriteSong,
-  onUpdateFavoriteSong,
-  isBiometricLocked,
-  onToggleBiometric
+  onUpdateFavoriteSong
 }) {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
@@ -170,37 +168,6 @@ export default function ProfileScreen({
             </div>
           </div>
           <ChevronRight size={18} color="#8C7A7C" />
-        </div>
-
-        {/* Security Lock Toggle */}
-        <div
-          onClick={onToggleBiometric}
-          style={{
-            backgroundColor: '#FFF', borderRadius: '20px', padding: '18px 20px',
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            boxShadow: '0 4px 12px rgba(0,0,0,0.03)', cursor: 'pointer', border: '1px solid #E0D4C5'
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-            <ShieldCheck size={24} color={isBiometricLocked ? "#8AA982" : "#8C7A7C"} />
-            <div>
-              <span style={{ fontSize: '11px', color: '#8C7A7C', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Security</span>
-              <h4 style={{ fontSize: '15px', fontWeight: 600, color: '#3D2C2E' }}>
-                Biometric Lock ({isBiometricLocked ? 'On' : 'Off'})
-              </h4>
-            </div>
-          </div>
-          <div style={{
-            width: '46px', height: '26px', borderRadius: '13px',
-            backgroundColor: isBiometricLocked ? '#8AA982' : '#E0D4C5',
-            position: 'relative', transition: 'background-color 0.2s ease'
-          }}>
-            <div style={{
-              width: '22px', height: '22px', borderRadius: '50%', backgroundColor: '#FFF',
-              position: 'absolute', top: '2px', left: isBiometricLocked ? '22px' : '2px',
-              transition: 'left 0.2s ease', boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
-            }} />
-          </div>
         </div>
       </div>
 

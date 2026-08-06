@@ -144,7 +144,6 @@ export default function HeartNotesView({ notes = [], currentPartner, onOpenNewTh
                     </button>
                   )}
 
-                  <Lock size={16} color="#EE7B7B" />
                 </div>
               </div>
             );

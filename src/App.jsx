@@ -197,6 +197,7 @@ export default function App() {
         theme={theme}
         onSelectTheme={setTheme}
         notesCount={notes.length}
+        unreadLettersCount={letters.filter(l => l.recipient === currentPartner && (!l.unlockTimestamp || Date.now() >= l.unlockTimestamp)).length}
       />
 
       {/* Main Content Area */}

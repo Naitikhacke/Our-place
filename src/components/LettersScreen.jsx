@@ -23,6 +23,21 @@ import {
 import { subscribeToLetters, sendLetterToSupabase, deleteLetterFromSupabase } from '../services/supabase';
 import { playChime, playMagicBell } from '../utils/audio';
 
+// Helper to guarantee value is ALWAYS a primitive string so React JSX children NEVER crash
+const ensureString = (val, fallback = '') => {
+  if (val === null || val === undefined) return fallback;
+  if (typeof val === 'object') {
+    try {
+      if (val.text) return String(val.text);
+      if (val.title) return String(val.title);
+      return JSON.stringify(val);
+    } catch (e) {
+      return fallback;
+    }
+  }
+  return String(val);
+};
+
 // Safe Date Formatter to prevent any JS RangeError crashes during render
 const formatDateSafe = (dateVal) => {
   if (!dateVal) return 'Today';
@@ -35,55 +50,7 @@ const formatDateSafe = (dateVal) => {
   }
 };
 
-// React Error Boundary Component for LettersScreen
-class LettersErrorBoundary extends React.Component {
-  constructor(props) {
-    super(props);
-    this.state = { hasError: false, errorInfo: null };
-  }
-
-  static getDerivedStateFromError(error) {
-    return { hasError: true };
-  }
-
-  componentDidCatch(error, errorInfo) {
-    console.error("LettersScreen caught an error:", error, errorInfo);
-  }
-
-  render() {
-    if (this.state.hasError) {
-      return (
-        <div style={{
-          backgroundColor: '#FFF9F4', borderRadius: '28px', padding: '40px',
-          textAlign: 'center', border: '1px solid #E0D4C5', margin: '40px auto',
-          maxWidth: '440px'
-        }}>
-          <span style={{ fontSize: '42px' }}>💌</span>
-          <h3 style={{ fontFamily: 'var(--font-serif)', fontSize: '20px', color: '#3D2C2E', marginTop: '12px' }}>
-            Letters Sanctuary Restored 💖
-          </h3>
-          <p style={{ fontSize: '13px', color: '#8C7A7C', marginTop: '6px', marginBottom: '20px' }}>
-            We've cleared transient state for Naitik & Raj. Click below to refresh your letters!
-          </p>
-          <button
-            onClick={() => this.setState({ hasError: false })}
-            style={{
-              padding: '12px 24px', borderRadius: '24px',
-              backgroundColor: 'var(--brand-primary)', border: 'none',
-              color: '#FFF', fontSize: '14px', fontWeight: 600,
-              cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '8px'
-            }}
-          >
-            <RefreshCw size={16} /> Open Letters Mailbox
-          </button>
-        </div>
-      );
-    }
-    return this.props.children;
-  }
-}
-
-function LettersScreenContent({ currentPartner = 'Naitik', theme = 'morning' }) {
+export default function LettersScreen({ currentPartner = 'Naitik', theme = 'morning' }) {
   const isNight = theme === 'night';
   const recipientName = currentPartner === 'Naitik' ? 'Raj' : 'Naitik';
 
@@ -130,41 +97,52 @@ function LettersScreenContent({ currentPartner = 'Naitik', theme = 'morning' }) 
     const unsub = subscribeToLetters((remoteLetters) => {
       if (remoteLetters && Array.isArray(remoteLetters)) {
         setLetters(remoteLetters.map(l => {
-          if (!l) return null;
-          
-          let rawBody = String(l.body || '');
-          let parsedBody = rawBody;
+          if (!l || typeof l !== 'object') return null;
+
+          let parsedBody = '';
           let meta = {};
 
-          if (rawBody.trim().startsWith('{') && rawBody.trim().endsWith('}')) {
-            try {
-              meta = JSON.parse(rawBody);
-              parsedBody = String(meta.text || '');
-            } catch (e) {
-              parsedBody = rawBody;
+          if (l.body && typeof l.body === 'object') {
+            meta = l.body;
+            parsedBody = ensureString(meta.text || meta.body || '');
+          } else if (typeof l.body === 'string') {
+            const rawStr = l.body.trim();
+            if (rawStr.startsWith('{') && rawStr.endsWith('}')) {
+              try {
+                meta = JSON.parse(rawStr);
+                parsedBody = ensureString(meta.text || meta.body || rawStr);
+              } catch (e) {
+                parsedBody = rawStr;
+              }
+            } else {
+              parsedBody = rawStr;
             }
+          } else {
+            parsedBody = ensureString(l.body, '');
           }
 
           let unlockTs = null;
           if (l.unlock_timestamp) {
-            const parsedTs = new Date(l.unlock_timestamp).getTime();
-            if (!isNaN(parsedTs)) unlockTs = parsedTs;
+            try {
+              const parsedTs = new Date(l.unlock_timestamp).getTime();
+              if (!isNaN(parsedTs)) unlockTs = parsedTs;
+            } catch (e) {}
           }
 
           return {
-            id: String(l.id || Date.now()),
-            author: String(l.author || 'Naitik'),
-            recipient: String(l.recipient || 'Raj'),
-            title: String(l.title || 'Untitled Letter'),
+            id: ensureString(l.id, Date.now().toString()),
+            author: ensureString(l.author, 'Naitik'),
+            recipient: ensureString(l.recipient, 'Raj'),
+            title: ensureString(l.title, 'Untitled Letter'),
             body: parsedBody,
-            fontFamily: String(meta.fontFamily || 'Dancing Script'),
-            mood: String(meta.mood || '💖 Romantic'),
-            sticker: String(meta.sticker || '🌸 Rose'),
-            photoUrl: String(meta.photoUrl || ''),
-            voiceNote: String(meta.voiceNote || ''),
-            songLink: String(meta.songLink || ''),
-            color: String(l.color || meta.color || '#FFD9D9'),
-            border: String(l.border || meta.border || '#FFAAAA'),
+            fontFamily: ensureString(meta.fontFamily, 'Dancing Script'),
+            mood: ensureString(meta.mood, '💖 Romantic'),
+            sticker: ensureString(meta.sticker, '🌸 Rose'),
+            photoUrl: ensureString(meta.photoUrl, ''),
+            voiceNote: ensureString(meta.voiceNote, ''),
+            songLink: ensureString(meta.songLink, ''),
+            color: ensureString(l.color || meta.color, '#FFD9D9'),
+            border: ensureString(l.border || meta.border, '#FFAAAA'),
             createdDate: l.created_at || new Date().toISOString(),
             unlockTimestamp: unlockTs
           };
@@ -267,11 +245,15 @@ function LettersScreenContent({ currentPartner = 'Naitik', theme = 'morning' }) 
     }
   };
 
-  const filteredLetters = letters.filter((letter) => {
+  const filteredLetters = (letters || []).filter((letter) => {
     if (!letter) return false;
-    if (filter === 'Today') return isWrittenToday(letter);
-    if (filter === 'Past Archive') return !isWrittenToday(letter);
-    return true;
+    try {
+      if (filter === 'Today') return isWrittenToday(letter);
+      if (filter === 'Past Archive') return !isWrittenToday(letter);
+      return true;
+    } catch (err) {
+      return true;
+    }
   });
 
   const handleLetterClick = (letter) => {
@@ -862,13 +844,5 @@ function LettersScreenContent({ currentPartner = 'Naitik', theme = 'morning' }) 
         </div>
       )}
     </div>
-  );
-}
-
-export default function LettersScreen(props) {
-  return (
-    <LettersErrorBoundary>
-      <LettersScreenContent {...props} />
-    </LettersErrorBoundary>
   );
 }

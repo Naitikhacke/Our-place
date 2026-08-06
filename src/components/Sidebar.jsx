@@ -24,7 +24,8 @@ export default function Sidebar({
   onOpenPartnerSelect, 
   theme, 
   onSelectTheme,
-  notesCount 
+  notesCount,
+  unreadLettersCount = 0
 }) {
   const isNight = theme === 'night';
   const relTime = getRelationshipTime();
@@ -34,7 +35,7 @@ export default function Sidebar({
     { id: 'notes', label: 'Heart Notes', icon: FileText, badge: notesCount },
     { id: 'ritual', label: "Let's Talk", icon: MessageCircle },
     { id: 'garden', label: 'Garden', icon: Flower2 },
-    { id: 'letters', label: 'Letters', icon: Mail },
+    { id: 'letters', label: 'Letters', icon: Mail, greenBadge: unreadLettersCount },
     { id: 'memories', label: 'Memories', icon: Sparkles },
     { id: 'timeline', label: 'Timeline', icon: Calendar },
     { id: 'playlist', label: 'Playlist', icon: Music },
@@ -147,6 +148,22 @@ export default function Sidebar({
                   borderRadius: '10px'
                 }}>
                   {item.badge}
+                </span>
+              )}
+              {item.greenBadge > 0 && (
+                <span style={{
+                  backgroundColor: '#4CAF50',
+                  color: '#FFF',
+                  fontSize: '10px',
+                  fontWeight: 700,
+                  padding: '2px 8px',
+                  borderRadius: '10px',
+                  boxShadow: '0 2px 6px rgba(76,175,80,0.4)',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px'
+                }}>
+                  ● {item.greenBadge}
                 </span>
               )}
             </button>

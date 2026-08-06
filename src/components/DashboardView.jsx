@@ -141,12 +141,17 @@ export default function DashboardView({
             </div>
 
             <button
+              onClick={() => onNavigateTab('letters')}
+              title={letters.filter(l => l.recipient === currentPartner && (!l.unlockTimestamp || Date.now() >= l.unlockTimestamp)).length > 0 ? "You have unread letters! Click to view 💌" : "Notifications"}
               style={{
                 width: '42px', height: '42px', borderRadius: '50%',
-                backgroundColor: 'rgba(255,255,255,0.25)', backdropFilter: 'blur(10px)',
-                border: '1px solid rgba(255,255,255,0.3)', color: '#FFF',
+                backgroundColor: letters.filter(l => l.recipient === currentPartner && (!l.unlockTimestamp || Date.now() >= l.unlockTimestamp)).length > 0 ? '#4CAF50' : 'rgba(255,255,255,0.25)', 
+                backdropFilter: 'blur(10px)',
+                border: letters.filter(l => l.recipient === currentPartner && (!l.unlockTimestamp || Date.now() >= l.unlockTimestamp)).length > 0 ? '2px solid #FFF' : '1px solid rgba(255,255,255,0.3)', 
+                color: '#FFF',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                cursor: 'pointer'
+                cursor: 'pointer',
+                boxShadow: letters.filter(l => l.recipient === currentPartner && (!l.unlockTimestamp || Date.now() >= l.unlockTimestamp)).length > 0 ? '0 4px 14px rgba(76,175,80,0.5)' : 'none'
               }}
             >
               <Bell size={18} />
