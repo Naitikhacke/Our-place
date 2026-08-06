@@ -4,11 +4,26 @@ import { playChime } from '../utils/audio';
 import { getRelationshipTime } from '../utils/dateCalculator';
 import { updatePartnerMoodInSupabase } from '../services/supabase';
 
-export default function PartnerSelectModal({ currentPartner, onSelectPartner, onClose }) {
+export default function PartnerSelectModal({ currentPartner, partnerMoods = {}, onSelectPartner, onClose }) {
   const [step, setStep] = useState(1);
   const [selectedPartner, setSelectedPartner] = useState(currentPartner || 'Naitik');
-  const [selectedMood, setSelectedMood] = useState('😊');
-  const [moodNote, setMoodNote] = useState('');
+
+  const getPartnerEmoji = (partner) => {
+    const val = partnerMoods[partner];
+    if (!val) return localStorage.getItem(`bu_mood_${partner}`) || '😊';
+    if (typeof val === 'string') return val;
+    return val.emoji || '😊';
+  };
+
+  const getPartnerNote = (partner) => {
+    const val = partnerMoods[partner];
+    if (!val) return localStorage.getItem(`bu_mood_note_${partner}`) || '';
+    if (typeof val === 'string') return localStorage.getItem(`bu_mood_note_${partner}`) || '';
+    return val.note || '';
+  };
+
+  const [selectedMood, setSelectedMood] = useState(() => getPartnerEmoji(currentPartner || 'Naitik'));
+  const [moodNote, setMoodNote] = useState(() => getPartnerNote(currentPartner || 'Naitik'));
 
   const relTime = getRelationshipTime();
 
@@ -23,6 +38,8 @@ export default function PartnerSelectModal({ currentPartner, onSelectPartner, on
   const handleChoosePartner = (partnerId) => {
     playChime();
     setSelectedPartner(partnerId);
+    setSelectedMood(getPartnerEmoji(partnerId));
+    setMoodNote(getPartnerNote(partnerId));
     setStep(2);
   };
 
@@ -30,7 +47,8 @@ export default function PartnerSelectModal({ currentPartner, onSelectPartner, on
     playChime();
     // Persist and sync mood live via Supabase
     await updatePartnerMoodInSupabase(selectedPartner, selectedMood, moodNote);
-    onSelectPartner(selectedPartner);
+    // Pass mood emoji & note back so App.jsx updates dashboard instantly
+    onSelectPartner(selectedPartner, selectedMood, moodNote);
   };
 
   return (

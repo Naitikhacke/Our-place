@@ -30,13 +30,16 @@ export default function DashboardView({
   partnerMoods = { Naitik: '😊', Raj: '😊' },
   onOpenNewThought,
   onOpenRitual,
-  onNavigateTab
+  onNavigateTab,
+  onUpdateMood
 }) {
   const isNight = theme === 'night';
   const otherPartner = currentPartner === 'Naitik' ? 'Raj' : 'Naitik';
   const relTime = getRelationshipTime();
 
   const handleUpdateCurrentMood = async (newMood) => {
+    // Instantly update local state
+    if (onUpdateMood) onUpdateMood(currentPartner, newMood);
     await updatePartnerMoodInSupabase(currentPartner, newMood);
   };
 
@@ -556,81 +559,105 @@ export default function DashboardView({
         </div>
 
         {/* Right: REAL-TIME NAITIK & RAJ MOOD TRACKER CARD */}
-        <div style={{
-          backgroundColor: '#FFF9F4',
-          borderRadius: '28px',
-          padding: '24px',
-          border: '1px solid #F0E4D8',
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'space-between'
-        }}>
-          <div>
-            <h4 style={{ fontSize: '15px', fontWeight: 700, color: '#3D2C2E' }}>
-              How We are Feeling Today
-            </h4>
-            <p style={{ fontSize: '11px', color: '#8C7A7C', marginTop: '2px' }}>
-              Synced live between Naitik & Raj ✨
-            </p>
+        {(() => {
+          const naitikMoodData = typeof partnerMoods.Naitik === 'object' && partnerMoods.Naitik
+            ? partnerMoods.Naitik 
+            : { emoji: partnerMoods.Naitik || '😊', note: '', date: '' };
 
-            {/* NAITIK'S MOOD ROW */}
-            <div style={{ marginTop: '16px', backgroundColor: '#FFF', padding: '12px', borderRadius: '16px', border: '1px solid #EBE0D3' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                <span style={{ fontSize: '12px', fontWeight: 700, color: '#3D2C2E', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  🐰 Naitik's Mood {currentPartner === 'Naitik' && <span style={{ fontSize: '10px', color: '#EE7B7B' }}>(You)</span>}
-                </span>
-                <span style={{ fontSize: '22px' }}>{partnerMoods.Naitik || '😊'}</span>
-              </div>
+          const rajMoodData = typeof partnerMoods.Raj === 'object' && partnerMoods.Raj
+            ? partnerMoods.Raj 
+            : { emoji: partnerMoods.Raj || '😊', note: '', date: '' };
 
-              {currentPartner === 'Naitik' && (
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '2px' }}>
-                  {['😡', '😔', '🥺', '😐', '😊'].map((em) => (
-                    <button
-                      key={em}
-                      onClick={() => handleUpdateCurrentMood(em)}
-                      style={{
-                        fontSize: '16px', padding: '4px 6px', borderRadius: '10px',
-                        border: partnerMoods.Naitik === em ? '2px solid #EE7B7B' : '1px solid transparent',
-                        backgroundColor: partnerMoods.Naitik === em ? '#FDE8E8' : 'transparent',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      {em}
-                    </button>
-                  ))}
+          return (
+            <div style={{
+              backgroundColor: '#FFF9F4',
+              borderRadius: '28px',
+              padding: '24px',
+              border: '1px solid #F0E4D8',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'space-between'
+            }}>
+              <div>
+                <h4 style={{ fontSize: '15px', fontWeight: 700, color: '#3D2C2E' }}>
+                  How We are Feeling Today
+                </h4>
+                <p style={{ fontSize: '11px', color: '#8C7A7C', marginTop: '2px' }}>
+                  Synced live between Naitik & Raj ✨
+                </p>
+
+                {/* NAITIK'S MOOD ROW */}
+                <div style={{ marginTop: '16px', backgroundColor: '#FFF', padding: '12px', borderRadius: '16px', border: '1px solid #EBE0D3' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                    <span style={{ fontSize: '12px', fontWeight: 700, color: '#3D2C2E', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      🐰 Naitik's Mood {currentPartner === 'Naitik' && <span style={{ fontSize: '10px', color: '#EE7B7B' }}>(You)</span>}
+                    </span>
+                    <span style={{ fontSize: '22px' }}>{naitikMoodData.emoji || '😊'}</span>
+                  </div>
+
+                  {naitikMoodData.note && (
+                    <div style={{ fontSize: '11px', fontStyle: 'italic', color: '#6A5658', backgroundColor: '#FFF7F0', padding: '6px 10px', borderRadius: '10px', marginBottom: '8px', borderLeft: '3px solid #EE7B7B' }}>
+                      💬 "{naitikMoodData.note}"
+                    </div>
+                  )}
+
+                  {currentPartner === 'Naitik' && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: '2px' }}>
+                      {['😡', '😔', '🥺', '😐', '😊'].map((em) => (
+                        <button
+                          key={em}
+                          onClick={() => handleUpdateCurrentMood(em)}
+                          style={{
+                            fontSize: '16px', padding: '4px 6px', borderRadius: '10px',
+                            border: naitikMoodData.emoji === em ? '2px solid #EE7B7B' : '1px solid transparent',
+                            backgroundColor: naitikMoodData.emoji === em ? '#FDE8E8' : 'transparent',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          {em}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
 
-            {/* RAJ'S MOOD ROW */}
-            <div style={{ marginTop: '10px', backgroundColor: '#FFF', padding: '12px', borderRadius: '16px', border: '1px solid #EBE0D3' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                <span style={{ fontSize: '12px', fontWeight: 700, color: '#3D2C2E', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  🐱 Raj's Mood {currentPartner === 'Raj' && <span style={{ fontSize: '10px', color: '#EE7B7B' }}>(You)</span>}
-                </span>
-                <span style={{ fontSize: '22px' }}>{partnerMoods.Raj || '😊'}</span>
-              </div>
+                {/* RAJ'S MOOD ROW */}
+                <div style={{ marginTop: '10px', backgroundColor: '#FFF', padding: '12px', borderRadius: '16px', border: '1px solid #EBE0D3' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                    <span style={{ fontSize: '12px', fontWeight: 700, color: '#3D2C2E', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      🐱 Raj's Mood {currentPartner === 'Raj' && <span style={{ fontSize: '10px', color: '#EE7B7B' }}>(You)</span>}
+                    </span>
+                    <span style={{ fontSize: '22px' }}>{rajMoodData.emoji || '😊'}</span>
+                  </div>
 
-              {currentPartner === 'Raj' && (
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '2px' }}>
-                  {['😡', '😔', '🥺', '😐', '😊'].map((em) => (
-                    <button
-                      key={em}
-                      onClick={() => handleUpdateCurrentMood(em)}
-                      style={{
-                        fontSize: '16px', padding: '4px 6px', borderRadius: '10px',
-                        border: partnerMoods.Raj === em ? '2px solid #EE7B7B' : '1px solid transparent',
-                        backgroundColor: partnerMoods.Raj === em ? '#FDE8E8' : 'transparent',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      {em}
-                    </button>
-                  ))}
+                  {rajMoodData.note && (
+                    <div style={{ fontSize: '11px', fontStyle: 'italic', color: '#6A5658', backgroundColor: '#FFF7F0', padding: '6px 10px', borderRadius: '10px', marginBottom: '8px', borderLeft: '3px solid #C6E2FF' }}>
+                      💬 "{rajMoodData.note}"
+                    </div>
+                  )}
+
+                  {currentPartner === 'Raj' && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: '2px' }}>
+                      {['😡', '😔', '🥺', '😐', '😊'].map((em) => (
+                        <button
+                          key={em}
+                          onClick={() => handleUpdateCurrentMood(em)}
+                          style={{
+                            fontSize: '16px', padding: '4px 6px', borderRadius: '10px',
+                            border: rajMoodData.emoji === em ? '2px solid #EE7B7B' : '1px solid transparent',
+                            backgroundColor: rajMoodData.emoji === em ? '#FDE8E8' : 'transparent',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          {em}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-          </div>
+              </div>
+          );
+        })()}
 
           <div style={{
             backgroundColor: '#FDE8E8', padding: '10px 14px', borderRadius: '14px',

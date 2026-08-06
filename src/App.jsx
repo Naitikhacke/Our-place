@@ -58,7 +58,7 @@ export default function App() {
     return localStorage.getItem('bu_favorite_song') || 'Yellow - Coldplay';
   });
 
-  const [isBiometricLocked, setIsBiometricLocked] = useState(false);
+
 
   // Modals
   const [isNewThoughtOpen, setIsNewThoughtOpen] = useState(false);
@@ -68,7 +68,18 @@ export default function App() {
   const [notes, setNotes] = useState([]);
   const [gardenItems, setGardenItems] = useState([]);
   const [letters, setLetters] = useState([]);
-  const [partnerMoods, setPartnerMoods] = useState({ Naitik: '😊', Raj: '😊' });
+  const [partnerMoods, setPartnerMoods] = useState(() => ({
+    Naitik: {
+      emoji: localStorage.getItem('bu_mood_Naitik') || '😊',
+      note: localStorage.getItem('bu_mood_note_Naitik') || '',
+      date: ''
+    },
+    Raj: {
+      emoji: localStorage.getItem('bu_mood_Raj') || '😊',
+      note: localStorage.getItem('bu_mood_note_Raj') || '',
+      date: ''
+    }
+  }));
 
   // Supabase Real-Time Listeners
   useEffect(() => {
@@ -137,8 +148,20 @@ export default function App() {
     localStorage.setItem('bu_current_partner', currentPartner);
   }, [currentPartner]);
 
-  const handleSelectPartner = (partnerId) => {
+  const handleSelectPartner = (partnerId, moodEmoji, moodNote) => {
     setCurrentPartner(partnerId);
+    // Instantly update mood & note in local state so dashboard reflects it right away
+    if (moodEmoji) {
+      const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      setPartnerMoods(prev => ({
+        ...prev,
+        [partnerId]: {
+          emoji: moodEmoji,
+          note: moodNote || '',
+          date: timeStr
+        }
+      }));
+    }
     setIsPartnerSelectOpen(false);
   };
 
@@ -183,6 +206,7 @@ export default function App() {
       {isPartnerSelectOpen && (
         <PartnerSelectModal
           currentPartner={currentPartner}
+          partnerMoods={partnerMoods}
           onSelectPartner={handleSelectPartner}
           onClose={() => setIsPartnerSelectOpen(false)}
         />
@@ -218,7 +242,20 @@ export default function App() {
             partnerMoods={partnerMoods}
             onOpenNewThought={() => setIsNewThoughtOpen(true)}
             onOpenRitual={() => setIsRitualOpen(true)}
-            onNavigateTab={setActiveTab}
+            onUpdateMood={(partner, emoji) => {
+              const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+              setPartnerMoods(prev => {
+                const existing = typeof prev[partner] === 'object' ? prev[partner] : { emoji: prev[partner] || '😊', note: '' };
+                return {
+                  ...prev,
+                  [partner]: {
+                    ...existing,
+                    emoji: emoji,
+                    date: timeStr
+                  }
+                };
+              });
+            }}
           />
         )}
 

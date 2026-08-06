@@ -182,27 +182,55 @@ export async function fetchPartnerMoods() {
       .from('garden_items')
       .select('*')
       .eq('category', 'Moods')
-      .order('created_at', { ascending: false });
+      .order('id', { ascending: false });
     
-    if (error || !data) return { Naitik: '😊', Raj: '😊' };
+    const defaultNaitikEmoji = localStorage.getItem('bu_mood_Naitik') || '😊';
+    const defaultNaitikNote = localStorage.getItem('bu_mood_note_Naitik') || '';
+    const defaultRajEmoji = localStorage.getItem('bu_mood_Raj') || '😊';
+    const defaultRajNote = localStorage.getItem('bu_mood_note_Raj') || '';
+
+    if (error || !data || data.length === 0) {
+      return {
+        Naitik: { emoji: defaultNaitikEmoji, note: defaultNaitikNote, date: '' },
+        Raj: { emoji: defaultRajEmoji, note: defaultRajNote, date: '' }
+      };
+    }
 
     const naitikItem = data.find(i => i.author === 'Naitik');
     const rajItem = data.find(i => i.author === 'Raj');
 
     return {
-      Naitik: naitikItem ? naitikItem.emoji : (localStorage.getItem('bu_mood_Naitik') || '😊'),
-      Raj: rajItem ? rajItem.emoji : (localStorage.getItem('bu_mood_Raj') || '😊')
+      Naitik: {
+        emoji: naitikItem ? naitikItem.emoji : defaultNaitikEmoji,
+        note: naitikItem ? (naitikItem.text && !naitikItem.text.startsWith('Feeling ') ? naitikItem.text : defaultNaitikNote) : defaultNaitikNote,
+        date: naitikItem ? (naitikItem.date || '') : ''
+      },
+      Raj: {
+        emoji: rajItem ? rajItem.emoji : defaultRajEmoji,
+        note: rajItem ? (rajItem.text && !rajItem.text.startsWith('Feeling ') ? rajItem.text : defaultRajNote) : defaultRajNote,
+        date: rajItem ? (rajItem.date || '') : ''
+      }
     };
   } catch (err) {
     return {
-      Naitik: localStorage.getItem('bu_mood_Naitik') || '😊',
-      Raj: localStorage.getItem('bu_mood_Raj') || '😊'
+      Naitik: {
+        emoji: localStorage.getItem('bu_mood_Naitik') || '😊',
+        note: localStorage.getItem('bu_mood_note_Naitik') || '',
+        date: ''
+      },
+      Raj: {
+        emoji: localStorage.getItem('bu_mood_Raj') || '😊',
+        note: localStorage.getItem('bu_mood_note_Raj') || '',
+        date: ''
+      }
     };
   }
 }
 
-export async function updatePartnerMoodInSupabase(partner, moodEmoji, moodNote) {
+export async function updatePartnerMoodInSupabase(partner, moodEmoji, moodNote = '') {
   localStorage.setItem(`bu_mood_${partner}`, moodEmoji);
+  localStorage.setItem(`bu_mood_note_${partner}`, moodNote);
+  const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   try {
     await supabase.from('garden_items').insert([{
       author: partner,
@@ -211,7 +239,7 @@ export async function updatePartnerMoodInSupabase(partner, moodEmoji, moodNote) 
       emoji: moodEmoji,
       title: `${partner}'s mood: ${moodEmoji}`,
       text: moodNote || `Feeling ${moodEmoji}`,
-      date: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      date: timeStr
     }]);
   } catch (err) {
     console.log('Mood update error:', err);
