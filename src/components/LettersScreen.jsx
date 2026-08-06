@@ -17,7 +17,8 @@ import {
   Mic,
   Smile,
   Volume2,
-  Flower2
+  Flower2,
+  RefreshCw
 } from 'lucide-react';
 import { subscribeToLetters, sendLetterToSupabase, deleteLetterFromSupabase } from '../services/supabase';
 import { playChime, playMagicBell } from '../utils/audio';
@@ -34,7 +35,55 @@ const formatDateSafe = (dateVal) => {
   }
 };
 
-export default function LettersScreen({ currentPartner = 'Naitik', theme = 'morning' }) {
+// React Error Boundary Component for LettersScreen
+class LettersErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, errorInfo: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.error("LettersScreen caught an error:", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{
+          backgroundColor: '#FFF9F4', borderRadius: '28px', padding: '40px',
+          textAlign: 'center', border: '1px solid #E0D4C5', margin: '40px auto',
+          maxWidth: '440px'
+        }}>
+          <span style={{ fontSize: '42px' }}>💌</span>
+          <h3 style={{ fontFamily: 'var(--font-serif)', fontSize: '20px', color: '#3D2C2E', marginTop: '12px' }}>
+            Letters Sanctuary Restored 💖
+          </h3>
+          <p style={{ fontSize: '13px', color: '#8C7A7C', marginTop: '6px', marginBottom: '20px' }}>
+            We've cleared transient state for Naitik & Raj. Click below to refresh your letters!
+          </p>
+          <button
+            onClick={() => this.setState({ hasError: false })}
+            style={{
+              padding: '12px 24px', borderRadius: '24px',
+              backgroundColor: 'var(--brand-primary)', border: 'none',
+              color: '#FFF', fontSize: '14px', fontWeight: 600,
+              cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '8px'
+            }}
+          >
+            <RefreshCw size={16} /> Open Letters Mailbox
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+function LettersScreenContent({ currentPartner = 'Naitik', theme = 'morning' }) {
   const isNight = theme === 'night';
   const recipientName = currentPartner === 'Naitik' ? 'Raj' : 'Naitik';
 
@@ -81,33 +130,45 @@ export default function LettersScreen({ currentPartner = 'Naitik', theme = 'morn
     const unsub = subscribeToLetters((remoteLetters) => {
       if (remoteLetters && Array.isArray(remoteLetters)) {
         setLetters(remoteLetters.map(l => {
-          let parsedBody = l.body || '';
+          if (!l) return null;
+          
+          let rawBody = String(l.body || '');
+          let parsedBody = rawBody;
           let meta = {};
-          if (typeof parsedBody === 'string' && parsedBody.startsWith('{') && parsedBody.endsWith('}')) {
+
+          if (rawBody.trim().startsWith('{') && rawBody.trim().endsWith('}')) {
             try {
-              meta = JSON.parse(parsedBody);
-              parsedBody = meta.text || '';
-            } catch (e) {}
+              meta = JSON.parse(rawBody);
+              parsedBody = String(meta.text || '');
+            } catch (e) {
+              parsedBody = rawBody;
+            }
+          }
+
+          let unlockTs = null;
+          if (l.unlock_timestamp) {
+            const parsedTs = new Date(l.unlock_timestamp).getTime();
+            if (!isNaN(parsedTs)) unlockTs = parsedTs;
           }
 
           return {
-            id: l.id || Date.now().toString(),
-            author: l.author || 'Naitik',
-            recipient: l.recipient || 'Raj',
-            title: l.title || 'Untitled Letter',
+            id: String(l.id || Date.now()),
+            author: String(l.author || 'Naitik'),
+            recipient: String(l.recipient || 'Raj'),
+            title: String(l.title || 'Untitled Letter'),
             body: parsedBody,
-            fontFamily: meta.fontFamily || 'Dancing Script',
-            mood: meta.mood || '💖 Romantic',
-            sticker: meta.sticker || '🌸 Rose',
-            photoUrl: meta.photoUrl || '',
-            voiceNote: meta.voiceNote || '',
-            songLink: meta.songLink || '',
-            color: l.color || meta.color || '#FFD9D9',
-            border: l.border || meta.border || '#FFAAAA',
+            fontFamily: String(meta.fontFamily || 'Dancing Script'),
+            mood: String(meta.mood || '💖 Romantic'),
+            sticker: String(meta.sticker || '🌸 Rose'),
+            photoUrl: String(meta.photoUrl || ''),
+            voiceNote: String(meta.voiceNote || ''),
+            songLink: String(meta.songLink || ''),
+            color: String(l.color || meta.color || '#FFD9D9'),
+            border: String(l.border || meta.border || '#FFAAAA'),
             createdDate: l.created_at || new Date().toISOString(),
-            unlockTimestamp: l.unlock_timestamp ? new Date(l.unlock_timestamp).getTime() : null
+            unlockTimestamp: unlockTs
           };
-        }));
+        }).filter(Boolean));
       }
     });
 
@@ -207,12 +268,14 @@ export default function LettersScreen({ currentPartner = 'Naitik', theme = 'morn
   };
 
   const filteredLetters = letters.filter((letter) => {
+    if (!letter) return false;
     if (filter === 'Today') return isWrittenToday(letter);
     if (filter === 'Past Archive') return !isWrittenToday(letter);
     return true;
   });
 
   const handleLetterClick = (letter) => {
+    if (!letter) return;
     if (isLetterUnlocked(letter)) {
       playChime();
       setSelectedLetter(letter);
@@ -799,5 +862,13 @@ export default function LettersScreen({ currentPartner = 'Naitik', theme = 'morn
         </div>
       )}
     </div>
+  );
+}
+
+export default function LettersScreen(props) {
+  return (
+    <LettersErrorBoundary>
+      <LettersScreenContent {...props} />
+    </LettersErrorBoundary>
   );
 }
