@@ -911,16 +911,18 @@ export default function LettersScreen({
               </div>
             )}
 
-            {/* Voice Note Audio Preview */}
+            {/* Voice Note Audio Player */}
             {selectedLetter.voiceNote && (
               <div style={{
-                padding: '12px', borderRadius: '14px', backgroundColor: '#FFF',
-                border: '1px solid #E0D4C5', display: 'flex', alignItems: 'center', gap: '10px'
+                padding: '12px', borderRadius: '14px', backgroundColor: '#FFF7F0',
+                border: '1px solid #EE7B7B', display: 'flex', alignItems: 'center', gap: '10px',
+                marginTop: '12px'
               }}>
-                <Mic size={18} color="#EE7B7B" />
+                <Volume2 size={20} color="#EE7B7B" />
                 <span style={{ fontSize: '12px', fontWeight: 600, color: '#3D2C2E' }}>
-                  Voice note: {selectedLetter.voiceNote}
+                  Voice Note:
                 </span>
+                <audio src={selectedLetter.voiceNote} controls style={{ height: '36px', flex: 1 }} />
               </div>
             )}
           </div>

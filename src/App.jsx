@@ -272,7 +272,23 @@ export default function App() {
 
   const handleSendLetter = async (newLetter) => {
     setLetters(prev => [newLetter, ...prev]);
-    await sendLetterToSupabase(newLetter);
+
+    const metadataPayload = JSON.stringify({
+      text: newLetter.body,
+      fontFamily: newLetter.fontFamily,
+      mood: newLetter.mood,
+      sticker: newLetter.sticker,
+      photoUrl: newLetter.photoUrl,
+      voiceNote: newLetter.voiceNote,
+      songLink: newLetter.songLink,
+      color: newLetter.color,
+      border: newLetter.border
+    });
+
+    await sendLetterToSupabase({
+      ...newLetter,
+      body: metadataPayload
+    });
   };
 
   const handleDeleteLetter = async (letterId, letterAuthor) => {
