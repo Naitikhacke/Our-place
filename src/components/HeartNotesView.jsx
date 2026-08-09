@@ -2,20 +2,33 @@ import React, { useState } from 'react';
 import { FileText, Plus, Lock, Heart, Check, Trash2, Filter } from 'lucide-react';
 import { deleteHeartNoteFromSupabase } from '../services/supabase';
 
-export default function HeartNotesView({ notes = [], currentPartner, onOpenNewThought, onOpenRitual }) {
+export default function HeartNotesView({
+  notes = [],
+  currentPartner,
+  onOpenNewThought,
+  onOpenRitual,
+  onMarkNoteSeen,
+  onDeleteNote
+}) {
   const [filter, setFilter] = useState('All');
   const recipientName = currentPartner === 'Naitik' ? 'Raj' : 'Naitik';
 
+  const isUnreadForCurrent = (n) => !n.seenBy || !n.seenBy.includes(currentPartner);
+
   const filteredNotes = notes.filter((n) => {
     if (filter === 'All') return true;
-    if (filter === 'Unread') return n.status === 'unread';
+    if (filter === 'Unread') return isUnreadForCurrent(n);
     if (filter === 'Resolved') return n.status === 'resolved';
     return true;
   });
 
-  const handleDeleteNote = async (noteId, noteAuthor) => {
+  const handleDeleteNoteAction = async (noteId, noteAuthor) => {
     if (noteAuthor !== currentPartner) return;
-    await deleteHeartNoteFromSupabase(noteId);
+    if (onDeleteNote) {
+      await onDeleteNote(noteId, noteAuthor);
+    } else {
+      await deleteHeartNoteFromSupabase(noteId);
+    }
   };
 
   return (
@@ -62,7 +75,7 @@ export default function HeartNotesView({ notes = [], currentPartner, onOpenNewTh
               fontSize: '13px', fontWeight: 600, cursor: 'pointer'
             }}
           >
-            {f} Notes ({notes.filter(n => f === 'All' ? true : f === 'Unread' ? n.status === 'unread' : n.status === 'resolved').length})
+            {f} Notes ({notes.filter(n => f === 'All' ? true : f === 'Unread' ? isUnreadForCurrent(n) : n.status === 'resolved').length})
           </button>
         ))}
       </div>
@@ -85,20 +98,25 @@ export default function HeartNotesView({ notes = [], currentPartner, onOpenNewTh
         ) : (
           filteredNotes.map((n) => {
             const canDelete = n.author === currentPartner;
+            const unread = isUnreadForCurrent(n);
 
             return (
               <div
                 key={n.id}
+                onClick={() => {
+                  if (unread && onMarkNoteSeen) onMarkNoteSeen(n.id, currentPartner);
+                }}
                 style={{
                   backgroundColor: '#FFF',
                   borderRadius: '24px',
                   padding: '20px 24px',
-                  border: '1px solid #EBE0D3',
+                  border: unread ? '1.5px solid #EE7B7B' : '1px solid #EBE0D3',
                   boxShadow: 'var(--shadow-sm)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
-                  gap: '16px'
+                  gap: '16px',
+                  cursor: unread ? 'pointer' : 'default'
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flex: 1 }}>
@@ -122,17 +140,41 @@ export default function HeartNotesView({ notes = [], currentPartner, onOpenNewTh
                       <span style={{ fontSize: '11px', backgroundColor: '#FDE8E8', color: '#EE7B7B', padding: '2px 10px', borderRadius: '10px', fontWeight: 600 }}>
                         Need: {n.need}
                       </span>
+                      {unread && (
+                        <span style={{ fontSize: '10px', backgroundColor: '#EE7B7B', color: '#FFF', padding: '2px 8px', borderRadius: '8px', fontWeight: 700 }}>
+                          UNREAD FOR YOU
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
                   <span style={{ fontSize: '12px', color: '#8C7A7C' }}>{n.timestamp}</span>
+
+                  {unread && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (onMarkNoteSeen) onMarkNoteSeen(n.id, currentPartner);
+                      }}
+                      style={{
+                        backgroundColor: '#EE7B7B', border: 'none', borderRadius: '12px',
+                        padding: '6px 12px', color: '#FFF', fontSize: '11px', fontWeight: 600,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Mark Seen
+                    </button>
+                  )}
                   
                   {/* AUTHOR-ONLY DELETION BUTTON */}
                   {canDelete && (
                     <button
-                      onClick={() => handleDeleteNote(n.id, n.author)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteNoteAction(n.id, n.author);
+                      }}
                       title={`Delete note written by you (${currentPartner})`}
                       style={{
                         backgroundColor: '#FDE8E8', border: 'none', borderRadius: '10px',

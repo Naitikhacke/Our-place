@@ -14,9 +14,15 @@ import PartnerSelectModal from './components/PartnerSelectModal';
 import { 
   subscribeToHeartNotes, 
   sendHeartNoteToSupabase, 
+  deleteHeartNoteFromSupabase,
+  updateHeartNoteSeenInSupabase,
   subscribeToGarden, 
   addGardenItemToSupabase,
+  deleteGardenItemFromSupabase,
   subscribeToLetters,
+  sendLetterToSupabase,
+  deleteLetterFromSupabase,
+  updateLetterSeenInSupabase,
   subscribeToPartnerMoods
 } from './services/supabase';
 
@@ -30,35 +36,17 @@ function getAutoTimeTheme() {
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('home');
-  
-  // Automatic time-based theme
-  const [theme, setTheme] = useState(() => getAutoTimeTheme());
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setTheme(getAutoTimeTheme());
-    }, 60000); // Check every minute
-    return () => clearInterval(timer);
-  }, []);
-
-  // Active Partner Profile (Naitik or Raj)
   const [currentPartner, setCurrentPartner] = useState(() => {
     return localStorage.getItem('bu_current_partner') || 'Naitik';
   });
+  const [isPartnerSelectOpen, setIsPartnerSelectOpen] = useState(false);
+  const [theme, setTheme] = useState(() => getAutoTimeTheme());
 
-  // Always show entry popup on website load or refresh
-  const [isPartnerSelectOpen, setIsPartnerSelectOpen] = useState(true);
-
-  // App State Data
-  const [couplesNames, setCouplesNames] = useState('Naitik & Raj ♡');
-  const [anniversaryDate, setAnniversaryDate] = useState(() => {
-    return localStorage.getItem('bu_anniversary') || '21 June 2026, 5:16 AM';
-  });
-  const [favoriteSong, setFavoriteSong] = useState(() => {
-    return localStorage.getItem('bu_favorite_song') || 'Yellow - Coldplay';
-  });
-
-
+  // Personalization State
+  const [couplesNames, setCouplesNames] = useState({ partner1: 'Naitik', partner2: 'Raj' });
+  const [anniversaryDate, setAnniversaryDate] = useState('2024-03-24');
+  const [favoriteSong, setFavoriteSong] = useState('Perfect - Ed Sheeran');
+  const [isBiometricLocked, setIsBiometricLocked] = useState(false);
 
   // Modals
   const [isNewThoughtOpen, setIsNewThoughtOpen] = useState(false);
@@ -84,49 +72,114 @@ export default function App() {
   // Supabase Real-Time Listeners
   useEffect(() => {
     const unsubNotes = subscribeToHeartNotes((remoteNotes) => {
-      if (remoteNotes) {
-        setNotes(remoteNotes.map(n => ({
-          id: n.id,
-          author: n.author,
-          recipient: n.recipient,
-          text: n.text,
-          mood: n.mood,
-          need: n.need,
-          timestamp: new Date(n.created_at || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          status: n.status || 'unread',
-          unlockTimestamp: n.unlock_timestamp ? new Date(n.unlock_timestamp).getTime() : null
-        })));
+      if (remoteNotes && Array.isArray(remoteNotes)) {
+        setNotes(remoteNotes.map(n => {
+          let seenBy = [];
+          if (Array.isArray(n.seen_by)) {
+            seenBy = n.seen_by;
+          } else if (typeof n.seen_by === 'string') {
+            try { seenBy = JSON.parse(n.seen_by); } catch(e) { seenBy = [n.seen_by]; }
+          } else {
+            seenBy = [n.author || 'Naitik'];
+          }
+          return {
+            id: String(n.id),
+            author: n.author,
+            recipient: n.recipient,
+            text: n.text,
+            mood: n.mood,
+            need: n.need,
+            timestamp: new Date(n.created_at || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            status: n.status || 'unread',
+            seenBy: seenBy,
+            unlockTimestamp: n.unlock_timestamp ? new Date(n.unlock_timestamp).getTime() : null
+          };
+        }));
       }
     });
 
     const unsubGarden = subscribeToGarden((remoteGarden) => {
       if (remoteGarden) {
         setGardenItems(remoteGarden.map(g => ({
-          id: g.id,
+          id: String(g.id),
           author: g.author,
           type: g.type,
           category: g.category,
           emoji: g.emoji,
           title: g.title,
           text: g.text,
-          date: g.date || 'Recently'
+          date: g.date || 'Recently',
+          photoUrl: g.photo_url || g.photoUrl || '',
+          voiceUrl: g.voice_url || g.voiceUrl || ''
         })));
       }
     });
 
     const unsubLetters = subscribeToLetters((remoteLetters) => {
-      if (remoteLetters) {
-        setLetters(remoteLetters.map(l => ({
-          id: l.id,
-          author: l.author,
-          recipient: l.recipient,
-          title: l.title,
-          body: l.body,
-          color: l.color || '#FFD9D9',
-          border: l.border || '#FFAAAA',
-          createdDate: l.created_at || new Date().toISOString(),
-          unlockTimestamp: l.unlock_timestamp ? new Date(l.unlock_timestamp).getTime() : null
-        })));
+      if (remoteLetters && Array.isArray(remoteLetters)) {
+        const parsed = remoteLetters.map(l => {
+          if (!l || typeof l !== 'object') return null;
+
+          let parsedBody = '';
+          let meta = {};
+
+          if (l.body && typeof l.body === 'object') {
+            meta = l.body;
+            parsedBody = String(meta.text || meta.body || '');
+          } else if (typeof l.body === 'string') {
+            const rawStr = l.body.trim();
+            if (rawStr.startsWith('{') && rawStr.endsWith('}')) {
+              try {
+                meta = JSON.parse(rawStr);
+                parsedBody = String(meta.text || meta.body || rawStr);
+              } catch (e) {
+                parsedBody = rawStr;
+              }
+            } else {
+              parsedBody = rawStr;
+            }
+          } else {
+            parsedBody = String(l.body || '');
+          }
+
+          let seenBy = [];
+          if (Array.isArray(l.seen_by)) {
+            seenBy = l.seen_by;
+          } else if (typeof l.seen_by === 'string') {
+            try { seenBy = JSON.parse(l.seen_by); } catch(e) { seenBy = [l.seen_by]; }
+          } else {
+            seenBy = [l.author || 'Naitik'];
+          }
+
+          let unlockTs = null;
+          if (l.unlock_timestamp) {
+            try {
+              const parsedTs = new Date(l.unlock_timestamp).getTime();
+              if (!isNaN(parsedTs)) unlockTs = parsedTs;
+            } catch (e) {}
+          }
+
+          return {
+            id: String(l.id || Date.now().toString()),
+            author: String(l.author || 'Naitik'),
+            recipient: String(l.recipient || 'Raj'),
+            title: String(l.title || 'Untitled Letter'),
+            body: parsedBody,
+            fontFamily: String(meta.fontFamily || 'Dancing Script'),
+            mood: String(meta.mood || '💖 Romantic'),
+            sticker: String(meta.sticker || '🌸 Rose'),
+            photoUrl: String(meta.photoUrl || ''),
+            voiceNote: String(meta.voiceNote || ''),
+            songLink: String(meta.songLink || ''),
+            color: String(l.color || meta.color || '#FFD9D9'),
+            border: String(l.border || meta.border || '#FFAAAA'),
+            createdDate: l.created_at || new Date().toISOString(),
+            unlockTimestamp: unlockTs,
+            seenBy: seenBy
+          };
+        }).filter(Boolean);
+
+        setLetters(parsed);
       }
     });
 
@@ -150,7 +203,6 @@ export default function App() {
 
   const handleSelectPartner = (partnerId, moodEmoji, moodNote) => {
     setCurrentPartner(partnerId);
-    // Instantly update mood & note in local state so dashboard reflects it right away
     if (moodEmoji) {
       const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       setPartnerMoods(prev => ({
@@ -166,8 +218,29 @@ export default function App() {
   };
 
   const handleSendNote = (newNote) => {
-    setNotes([newNote, ...notes]);
-    sendHeartNoteToSupabase(newNote);
+    const noteWithSeen = {
+      ...newNote,
+      seenBy: [newNote.author || currentPartner]
+    };
+    setNotes([noteWithSeen, ...notes]);
+    sendHeartNoteToSupabase(noteWithSeen);
+  };
+
+  const handleMarkNoteSeen = async (noteId, partner) => {
+    const p = partner || currentPartner;
+    const target = notes.find(n => n.id === noteId);
+    if (!target) return;
+    if (target.seenBy && target.seenBy.includes(p)) return;
+
+    const updatedSeenBy = [...(target.seenBy || []), p];
+    setNotes(prev => prev.map(n => n.id === noteId ? { ...n, seenBy: updatedSeenBy } : n));
+    await updateHeartNoteSeenInSupabase(noteId, updatedSeenBy);
+  };
+
+  const handleDeleteNote = async (noteId, noteAuthor) => {
+    if (noteAuthor !== currentPartner) return;
+    setNotes(prev => prev.filter(n => n.id !== noteId));
+    await deleteHeartNoteFromSupabase(noteId);
   };
 
   const handleResolveNotes = () => {
@@ -192,6 +265,36 @@ export default function App() {
     addGardenItemToSupabase(item);
   };
 
+  const handleDeleteGardenItem = async (itemId) => {
+    setGardenItems(prev => prev.filter(g => String(g.id) !== String(itemId)));
+    await deleteGardenItemFromSupabase(itemId);
+  };
+
+  const handleSendLetter = async (newLetter) => {
+    setLetters(prev => [newLetter, ...prev]);
+    await sendLetterToSupabase(newLetter);
+  };
+
+  const handleDeleteLetter = async (letterId, letterAuthor) => {
+    if (letterAuthor && letterAuthor !== currentPartner) return;
+    setLetters(prev => prev.filter(l => l.id !== letterId));
+    await deleteLetterFromSupabase(letterId);
+  };
+
+  const handleMarkLetterSeen = async (letterId, partner) => {
+    const p = partner || currentPartner;
+    const target = letters.find(l => l.id === letterId);
+    if (!target) return;
+    if (target.seenBy && target.seenBy.includes(p)) return;
+
+    const updatedSeenBy = [...(target.seenBy || []), p];
+    setLetters(prev => prev.map(l => l.id === letterId ? { ...l, seenBy: updatedSeenBy } : l));
+    await updateLetterSeenInSupabase(letterId, updatedSeenBy);
+  };
+
+  const unreadNotesCount = notes.filter(n => !n.seenBy || !n.seenBy.includes(currentPartner)).length;
+  const unreadLettersCount = letters.filter(l => l.recipient === currentPartner && (!l.seenBy || !l.seenBy.includes(currentPartner)) && (!l.unlockTimestamp || Date.now() >= l.unlockTimestamp)).length;
+
   return (
     <div style={{
       width: '100%',
@@ -202,7 +305,6 @@ export default function App() {
       display: 'flex',
       position: 'relative'
     }}>
-      {/* Entry Partner & Mood Popup (Opens automatically on website load or refresh) */}
       {isPartnerSelectOpen && (
         <PartnerSelectModal
           currentPartner={currentPartner}
@@ -212,7 +314,6 @@ export default function App() {
         />
       )}
 
-      {/* Fixed Left Navigation Sidebar */}
       <Sidebar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
@@ -220,11 +321,10 @@ export default function App() {
         onOpenPartnerSelect={() => setIsPartnerSelectOpen(true)}
         theme={theme}
         onSelectTheme={setTheme}
-        notesCount={notes.length}
-        unreadLettersCount={letters.filter(l => l.recipient === currentPartner && (!l.unlockTimestamp || Date.now() >= l.unlockTimestamp)).length}
+        notesCount={unreadNotesCount}
+        unreadLettersCount={unreadLettersCount}
       />
 
-      {/* Main Content Area */}
       <main style={{
         marginLeft: '260px',
         width: 'calc(100% - 260px)',
@@ -242,6 +342,9 @@ export default function App() {
             partnerMoods={partnerMoods}
             onOpenNewThought={() => setIsNewThoughtOpen(true)}
             onOpenRitual={() => setIsRitualOpen(true)}
+            onNavigateTab={(tab) => setActiveTab(tab)}
+            onMarkLetterSeen={handleMarkLetterSeen}
+            onMarkNoteSeen={handleMarkNoteSeen}
             onUpdateMood={(partner, emoji) => {
               const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
               setPartnerMoods(prev => {
@@ -265,6 +368,8 @@ export default function App() {
             currentPartner={currentPartner}
             onOpenNewThought={() => setIsNewThoughtOpen(true)}
             onOpenRitual={() => setIsRitualOpen(true)}
+            onMarkNoteSeen={handleMarkNoteSeen}
+            onDeleteNote={handleDeleteNote}
           />
         )}
 
@@ -274,6 +379,7 @@ export default function App() {
             onClose={() => setActiveTab('home')}
             notes={notes}
             onResolveNotes={handleResolveNotes}
+            onMarkNoteSeen={handleMarkNoteSeen}
             currentPartner={currentPartner}
           />
         )}
@@ -288,15 +394,32 @@ export default function App() {
         )}
 
         {activeTab === 'letters' && (
-          <LettersScreen currentPartner={currentPartner} theme={theme} />
+          <LettersScreen
+            letters={letters}
+            currentPartner={currentPartner}
+            theme={theme}
+            onSendLetter={handleSendLetter}
+            onDeleteLetter={handleDeleteLetter}
+            onMarkLetterSeen={handleMarkLetterSeen}
+          />
         )}
 
         {activeTab === 'memories' && (
-          <MemoriesScreen currentPartner={currentPartner} />
+          <MemoriesScreen
+            gardenItems={gardenItems}
+            onAddGardenItem={handleAddGardenItem}
+            onDeleteGardenItem={handleDeleteGardenItem}
+            currentPartner={currentPartner}
+          />
         )}
 
         {activeTab === 'timeline' && (
-          <TimelineView currentPartner={currentPartner} />
+          <TimelineView
+            gardenItems={gardenItems}
+            onAddGardenItem={handleAddGardenItem}
+            onDeleteGardenItem={handleDeleteGardenItem}
+            currentPartner={currentPartner}
+          />
         )}
 
         {activeTab === 'playlist' && (
@@ -319,7 +442,6 @@ export default function App() {
         )}
       </main>
 
-      {/* Write Heart Note Modal */}
       <NewThoughtModal
         isOpen={isNewThoughtOpen}
         onClose={() => setIsNewThoughtOpen(false)}

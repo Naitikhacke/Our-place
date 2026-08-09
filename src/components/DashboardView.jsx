@@ -31,6 +31,8 @@ export default function DashboardView({
   onOpenNewThought,
   onOpenRitual,
   onNavigateTab,
+  onMarkLetterSeen,
+  onMarkNoteSeen,
   onUpdateMood
 }) {
   const isNight = theme === 'night';
@@ -49,6 +51,13 @@ export default function DashboardView({
   const realMemories = gardenItems.filter(i => i.category === 'Memories');
   const memoriesCount = realMemories.length;
   const lettersCount = letters.length;
+
+  // Unread Letters for current active partner profile
+  const unreadLetters = letters.filter(l => l.recipient === currentPartner && (!l.seenBy || !l.seenBy.includes(currentPartner)) && (!l.unlockTimestamp || Date.now() >= l.unlockTimestamp));
+  const hasUnreadLetters = unreadLetters.length > 0;
+
+  // Unread Notes for current active partner profile
+  const unreadNotes = notes.filter(n => !n.seenBy || !n.seenBy.includes(currentPartner));
 
   // Check if there is an unread sealed letter waiting
   const sealedLetter = letters.find(l => l.unlockTimestamp && Date.now() < l.unlockTimestamp);
@@ -145,16 +154,16 @@ export default function DashboardView({
 
             <button
               onClick={() => onNavigateTab('letters')}
-              title={letters.filter(l => l.recipient === currentPartner && (!l.unlockTimestamp || Date.now() >= l.unlockTimestamp)).length > 0 ? "You have unread letters! Click to view 💌" : "Notifications"}
+              title={hasUnreadLetters ? "You have unread letters! Click to view 💌" : "Notifications"}
               style={{
                 width: '42px', height: '42px', borderRadius: '50%',
-                backgroundColor: letters.filter(l => l.recipient === currentPartner && (!l.unlockTimestamp || Date.now() >= l.unlockTimestamp)).length > 0 ? '#4CAF50' : 'rgba(255,255,255,0.25)', 
+                backgroundColor: hasUnreadLetters ? '#4CAF50' : 'rgba(255,255,255,0.25)', 
                 backdropFilter: 'blur(10px)',
-                border: letters.filter(l => l.recipient === currentPartner && (!l.unlockTimestamp || Date.now() >= l.unlockTimestamp)).length > 0 ? '2px solid #FFF' : '1px solid rgba(255,255,255,0.3)', 
+                border: hasUnreadLetters ? '2px solid #FFF' : '1px solid rgba(255,255,255,0.3)', 
                 color: '#FFF',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 cursor: 'pointer',
-                boxShadow: letters.filter(l => l.recipient === currentPartner && (!l.unlockTimestamp || Date.now() >= l.unlockTimestamp)).length > 0 ? '0 4px 14px rgba(76,175,80,0.5)' : 'none'
+                boxShadow: hasUnreadLetters ? '0 4px 14px rgba(76,175,80,0.5)' : 'none'
               }}
             >
               <Bell size={18} />
@@ -322,7 +331,7 @@ export default function DashboardView({
                     backgroundColor: 'var(--brand-primary)', color: '#FFF',
                     fontSize: '11px', fontWeight: 700, padding: '3px 10px', borderRadius: '12px'
                   }}>
-                    {notes.length} new
+                    {unreadNotes.length} unread
                   </span>
                 </div>
                 <p style={{ fontSize: '12px', color: '#8C7A7C', marginTop: '2px' }}>
@@ -656,16 +665,16 @@ export default function DashboardView({
                   )}
                 </div>
               </div>
+
+              <div style={{
+                backgroundColor: '#FDE8E8', padding: '10px 14px', borderRadius: '14px',
+                fontSize: '12px', fontStyle: 'italic', color: '#EE7B7B', marginTop: '14px', textAlign: 'center'
+              }}>
+                “Thank you for being my safe place. I LOVE USS! 💕”
+              </div>
+            </div>
           );
         })()}
-
-          <div style={{
-            backgroundColor: '#FDE8E8', padding: '10px 14px', borderRadius: '14px',
-            fontSize: '12px', fontStyle: 'italic', color: '#EE7B7B', marginTop: '14px', textAlign: 'center'
-          }}>
-            “Thank you for being my safe place. I LOVE USS! 💕”
-          </div>
-        </div>
       </div>
 
       {/* 4. Row 3: LETTERS SECTION (PLACED DIRECTLY BELOW GARDEN ON DASHBOARD) */}

@@ -3,7 +3,7 @@ import { X, Flame, Heart, Sparkles, Check, ArrowRight } from 'lucide-react';
 import { playChime, playMagicBell } from '../utils/audio';
 import confetti from 'canvas-confetti';
 
-export default function EveningRitualModal({ isOpen, onClose, notes = [], onResolveNotes, currentPartner }) {
+export default function EveningRitualModal({ isOpen, onClose, notes = [], onResolveNotes, onMarkNoteSeen, currentPartner }) {
   if (!isOpen) return null;
 
   const [step, setStep] = useState(1);
@@ -15,6 +15,9 @@ export default function EveningRitualModal({ isOpen, onClose, notes = [], onReso
 
   const handleNextNote = () => {
     playMagicBell();
+    if (currentNote && onMarkNoteSeen) {
+      onMarkNoteSeen(currentNote.id, currentPartner);
+    }
     if (currentNoteIdx < activeNotesList.length - 1) {
       setCurrentNoteIdx(currentNoteIdx + 1);
     } else {
@@ -29,6 +32,9 @@ export default function EveningRitualModal({ isOpen, onClose, notes = [], onReso
   };
 
   const handleCompleteRitual = () => {
+    activeNotesList.forEach(n => {
+      if (onMarkNoteSeen) onMarkNoteSeen(n.id, currentPartner);
+    });
     onResolveNotes();
     onClose();
     setStep(1);

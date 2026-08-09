@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Mail, 
   Lock, 
@@ -7,6 +7,8 @@ import {
   PenTool, 
   Trash2,
   Mic,
+  Square,
+  Volume2,
   Image as ImageIcon,
   Music,
   Clock,
@@ -27,7 +29,14 @@ const formatDateSafe = (dateVal) => {
   }
 };
 
-export default function LettersScreen({ currentPartner = 'Naitik', theme = 'morning' }) {
+export default function LettersScreen({
+  letters = [],
+  currentPartner = 'Naitik',
+  theme = 'morning',
+  onSendLetter,
+  onDeleteLetter,
+  onMarkLetterSeen
+}) {
   const isNight = theme === 'night';
   const recipientName = currentPartner === 'Naitik' ? 'Raj' : 'Naitik';
 
@@ -47,6 +56,77 @@ export default function LettersScreen({ currentPartner = 'Naitik', theme = 'morn
   const [photoUrl, setPhotoUrl] = useState('');
   const [voiceNote, setVoiceNote] = useState('');
   const [songLink, setSongLink] = useState('');
+
+  // MediaRecorder Voice State
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingTime, setRecordingTime] = useState(0);
+  const [micPermissionError, setMicPermissionError] = useState('');
+  const mediaRecorderRef = useRef(null);
+  const audioChunksRef = useRef([]);
+  const timerRef = useRef(null);
+
+  const startVoiceRecording = async () => {
+    setMicPermissionError('');
+    audioChunksRef.current = [];
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = recorder;
+
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      recorder.onstop = () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          setVoiceNote(reader.result);
+        };
+        reader.readAsDataURL(audioBlob);
+
+        stream.getTracks().forEach(track => track.stop());
+        clearInterval(timerRef.current);
+        setIsRecording(false);
+      };
+
+      recorder.start();
+      setIsRecording(true);
+      setRecordingTime(0);
+
+      timerRef.current = setInterval(() => {
+        setRecordingTime(prev => prev + 1);
+      }, 1000);
+    } catch (err) {
+      console.error('Microphone permission error:', err);
+      setMicPermissionError('Microphone permission denied or not supported on this device.');
+      setIsRecording(false);
+    }
+  };
+
+  const stopVoiceRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, []);
+
+  const handlePhotoUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setPhotoUrl(reader.result);
+    };
+    reader.readAsDataURL(file);
+  };
   
   // Lock System
   const [lockType, setLockType] = useState('anytime');
@@ -65,73 +145,6 @@ export default function LettersScreen({ currentPartner = 'Naitik', theme = 'morn
   const moodOptions = ['💖 Romantic', '😊 Happy', '🥺 Tender', '😔 Comforting', '✨ Celebration'];
   const stickerOptions = ['🌸 Rose', '🪻 Lavender', '🌾 Daisy', '🎀 Ribbon', '💌 Wax Seal'];
   const fontOptions = ['Dancing Script', 'Caveat', 'Sacramento', 'Playfair Display'];
-
-  const [letters, setLetters] = useState([]);
-
-  // Supabase real-time sync with local state fallback
-  useEffect(() => {
-    const unsub = subscribeToLetters((remoteLetters) => {
-      if (remoteLetters && Array.isArray(remoteLetters)) {
-        const parsed = remoteLetters.map(l => {
-          if (!l || typeof l !== 'object') return null;
-
-          let parsedBody = '';
-          let meta = {};
-
-          if (l.body && typeof l.body === 'object') {
-            meta = l.body;
-            parsedBody = String(meta.text || meta.body || '');
-          } else if (typeof l.body === 'string') {
-            const rawStr = l.body.trim();
-            if (rawStr.startsWith('{') && rawStr.endsWith('}')) {
-              try {
-                meta = JSON.parse(rawStr);
-                parsedBody = String(meta.text || meta.body || rawStr);
-              } catch (e) {
-                parsedBody = rawStr;
-              }
-            } else {
-              parsedBody = rawStr;
-            }
-          } else {
-            parsedBody = String(l.body || '');
-          }
-
-          let unlockTs = null;
-          if (l.unlock_timestamp) {
-            try {
-              const parsedTs = new Date(l.unlock_timestamp).getTime();
-              if (!isNaN(parsedTs)) unlockTs = parsedTs;
-            } catch (e) {}
-          }
-
-          return {
-            id: String(l.id || Date.now().toString()),
-            author: String(l.author || 'Naitik'),
-            recipient: String(l.recipient || 'Raj'),
-            title: String(l.title || 'Untitled Letter'),
-            body: parsedBody,
-            fontFamily: String(meta.fontFamily || 'Dancing Script'),
-            mood: String(meta.mood || '💖 Romantic'),
-            sticker: String(meta.sticker || '🌸 Rose'),
-            photoUrl: String(meta.photoUrl || ''),
-            voiceNote: String(meta.voiceNote || ''),
-            songLink: String(meta.songLink || ''),
-            color: String(l.color || meta.color || '#FFD9D9'),
-            border: String(l.border || meta.border || '#FFAAAA'),
-            createdDate: l.created_at || new Date().toISOString(),
-            unlockTimestamp: unlockTs
-          };
-        }).filter(Boolean);
-
-        setLetters(parsed);
-      }
-    });
-
-    return () => {
-      if (unsub) unsub();
-    };
-  }, []);
 
   const handleCreateLetter = async () => {
     if (!newTitle.trim() || !newBody.trim()) return;
@@ -167,19 +180,6 @@ export default function LettersScreen({ currentPartner = 'Naitik', theme = 'morn
       author: currentPartner || 'Naitik',
       recipient: recipientName || 'Raj',
       title: newTitle,
-      body: metadataPayload,
-      color: selectedColorObj.hex,
-      border: selectedColorObj.border,
-      createdDate: new Date().toISOString(),
-      unlockTimestamp: targetTimestamp
-    };
-
-    // Instant local state update
-    const formattedLocalLetter = {
-      id: newId,
-      author: currentPartner || 'Naitik',
-      recipient: recipientName || 'Raj',
-      title: newTitle,
       body: newBody,
       fontFamily,
       mood,
@@ -190,11 +190,18 @@ export default function LettersScreen({ currentPartner = 'Naitik', theme = 'morn
       color: selectedColorObj.hex,
       border: selectedColorObj.border,
       createdDate: new Date().toISOString(),
-      unlockTimestamp: targetTimestamp
+      unlockTimestamp: targetTimestamp,
+      seenBy: [currentPartner || 'Naitik']
     };
 
-    setLetters(prev => [formattedLocalLetter, ...prev]);
-    await sendLetterToSupabase(newLetterItem);
+    if (onSendLetter) {
+      await onSendLetter(newLetterItem);
+    } else {
+      await sendLetterToSupabase({
+        ...newLetterItem,
+        body: metadataPayload
+      });
+    }
 
     // Reset Form
     setIsWriting(false);
@@ -211,11 +218,11 @@ export default function LettersScreen({ currentPartner = 'Naitik', theme = 'morn
     e.stopPropagation();
     if (letterAuthor !== currentPartner) return;
     
-    // 1. INSTANT LOCAL REMOVAL
-    setLetters(prev => prev.filter(l => l.id !== letterId));
-    
-    // 2. SUPABASE DB REMOVAL
-    await deleteLetterFromSupabase(letterId);
+    if (onDeleteLetter) {
+      await onDeleteLetter(letterId, letterAuthor);
+    } else {
+      await deleteLetterFromSupabase(letterId);
+    }
   };
 
   const isLetterUnlocked = (letter) => {
@@ -266,6 +273,9 @@ export default function LettersScreen({ currentPartner = 'Naitik', theme = 'morn
     if (isLetterUnlocked(letter)) {
       playChime();
       setSelectedLetter(letter);
+      if (onMarkLetterSeen) {
+        onMarkLetterSeen(letter.id, currentPartner);
+      }
     } else {
       setLockedLetterAlert(letter);
     }
@@ -608,26 +618,94 @@ export default function LettersScreen({ currentPartner = 'Naitik', theme = 'morn
 
             {/* 5. Optional Media Attachments */}
             <div style={{ backgroundColor: '#FFF9F4', padding: '14px', borderRadius: '16px', border: '1px solid #E0D4C5', marginBottom: '16px' }}>
-              <span style={{ fontSize: '11px', fontWeight: 700, color: '#8C7A7C', display: 'block', marginBottom: '8px' }}>
-                OPTIONAL ATTACHMENTS (PHOTO, VOICE NOTE, MUSIC)
+              <span style={{ fontSize: '11px', fontWeight: 700, color: '#8C7A7C', display: 'block', marginBottom: '10px' }}>
+                OPTIONAL ATTACHMENTS (PHOTO, LIVE VOICE NOTE, MUSIC)
               </span>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <input
-                  type="text"
-                  placeholder="📷 Photo URL (optional attached photo)"
-                  value={photoUrl}
-                  onChange={(e) => setPhotoUrl(e.target.value)}
-                  style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #E0D4C5', fontSize: '12px' }}
-                />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {/* Photo Upload Picker */}
+                <div>
+                  <label style={{ fontSize: '11px', fontWeight: 600, color: '#3D2C2E', display: 'block', marginBottom: '4px' }}>
+                    📷 Upload Photo from Device:
+                  </label>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handlePhotoUpload}
+                    style={{ fontSize: '12px', color: '#3D2C2E' }}
+                  />
+                  {photoUrl && (
+                    <div style={{ marginTop: '6px', position: 'relative', width: '90px', height: '90px', borderRadius: '10px', overflow: 'hidden', border: '1px solid #EE7B7B' }}>
+                      <img src={photoUrl} alt="Letter attachment preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      <button
+                        type="button"
+                        onClick={() => setPhotoUrl('')}
+                        style={{
+                          position: 'absolute', top: '2px', right: '2px', backgroundColor: 'rgba(0,0,0,0.6)',
+                          border: 'none', color: '#FFF', borderRadius: '50%', width: '20px', height: '20px', cursor: 'pointer', fontSize: '12px'
+                        }}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  )}
+                </div>
 
-                <input
-                  type="text"
-                  placeholder="🎙️ Voice note message / link (optional)"
-                  value={voiceNote}
-                  onChange={(e) => setVoiceNote(e.target.value)}
-                  style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #E0D4C5', fontSize: '12px' }}
-                />
+                {/* Live MediaRecorder Voice Note */}
+                <div>
+                  <label style={{ fontSize: '11px', fontWeight: 600, color: '#3D2C2E', display: 'block', marginBottom: '4px' }}>
+                    🎙️ Record Live Voice Note:
+                  </label>
+                  {micPermissionError && (
+                    <p style={{ fontSize: '10px', color: '#E53935', marginBottom: '4px' }}>{micPermissionError}</p>
+                  )}
+                  {!isRecording && !voiceNote && (
+                    <button
+                      type="button"
+                      onClick={startVoiceRecording}
+                      style={{
+                        padding: '6px 12px', borderRadius: '14px',
+                        backgroundColor: '#EE7B7B', border: 'none', color: '#FFF',
+                        fontSize: '11px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer'
+                      }}
+                    >
+                      <Mic size={14} /> Start Voice Recording
+                    </button>
+                  )}
+
+                  {isRecording && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', backgroundColor: '#FFF0F0', padding: '6px 10px', borderRadius: '10px', border: '1px solid #EE7B7B' }}>
+                      <div style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#E53935' }} />
+                      <span style={{ fontSize: '11px', fontWeight: 700, color: '#E53935' }}>
+                        Recording: {recordingTime}s
+                      </span>
+                      <button
+                        type="button"
+                        onClick={stopVoiceRecording}
+                        style={{
+                          padding: '4px 8px', borderRadius: '8px',
+                          backgroundColor: '#E53935', border: 'none', color: '#FFF',
+                          fontSize: '10px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px'
+                        }}
+                      >
+                        <Square size={10} /> Stop
+                      </button>
+                    </div>
+                  )}
+
+                  {voiceNote && !isRecording && (
+                    <div style={{ marginTop: '6px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <audio src={voiceNote} controls style={{ height: '32px', flex: 1 }} />
+                      <button
+                        type="button"
+                        onClick={() => setVoiceNote('')}
+                        style={{ padding: '4px 8px', borderRadius: '8px', backgroundColor: '#FDE8E8', border: 'none', color: '#EE7B7B', fontSize: '10px', cursor: 'pointer' }}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  )}
+                </div>
 
                 <input
                   type="text"

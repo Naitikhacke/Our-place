@@ -47,11 +47,20 @@ export async function sendHeartNoteToSupabase(note) {
         mood: note.mood,
         need: note.need,
         status: 'unread',
+        seen_by: note.seenBy || [note.author],
         unlock_timestamp: note.unlockTimestamp ? new Date(note.unlockTimestamp).toISOString() : null
       }]);
     return data;
   } catch (err) {
     console.log('Supabase insert note error:', err);
+  }
+}
+
+export async function updateHeartNoteSeenInSupabase(noteId, seenByArray) {
+  try {
+    await supabase.from('heart_notes').update({ seen_by: seenByArray }).eq('id', noteId);
+  } catch (err) {
+    console.log('Supabase update note seen error:', err);
   }
 }
 
@@ -92,12 +101,14 @@ export async function addGardenItemToSupabase(item) {
   try {
     await supabase.from('garden_items').insert([{
       author: item.author,
-      type: item.type,
-      category: item.category,
-      emoji: item.emoji,
+      type: item.type || 'flower',
+      category: item.category || 'Memories',
+      emoji: item.emoji || '🌸',
       title: item.title,
       text: item.text,
-      date: item.date
+      date: item.date,
+      photo_url: item.photoUrl || '',
+      voice_url: item.voiceUrl || ''
     }]);
   } catch (err) {
     console.log('Supabase add garden item info:', err);
@@ -146,10 +157,19 @@ export async function sendLetterToSupabase(letter) {
       body: letter.body,
       color: letter.color,
       border: letter.border,
+      seen_by: letter.seenBy || [letter.author],
       unlock_timestamp: letter.unlockTimestamp ? new Date(letter.unlockTimestamp).toISOString() : null
     }]);
   } catch (err) {
     console.log('Supabase insert letter info:', err);
+  }
+}
+
+export async function updateLetterSeenInSupabase(letterId, seenByArray) {
+  try {
+    await supabase.from('letters').update({ seen_by: seenByArray }).eq('id', letterId);
+  } catch (err) {
+    console.log('Supabase update letter seen error:', err);
   }
 }
 

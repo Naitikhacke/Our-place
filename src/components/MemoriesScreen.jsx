@@ -1,653 +1,540 @@
-import React, { useState } from 'react';
-import { Star, Plus, X, Volume2, Play, Pause, Image as ImageIcon, Mic, Music, Calendar, Clock, Sparkles, CheckSquare, Square } from 'lucide-react';
-import { playVoiceNotePreview, playChime } from '../utils/audio';
+import React, { useState, useRef, useEffect } from 'react';
+import { Star, Plus, X, Volume2, Play, Pause, Image as ImageIcon, Mic, Square, Music, Calendar, Clock, Sparkles, Trash2 } from 'lucide-react';
+import { playMagicBell } from '../utils/audio';
 
 const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || '';
 
-export default function MemoriesScreen({ currentPartner }) {
+export default function MemoriesScreen({ gardenItems = [], onAddGardenItem, onDeleteGardenItem, currentPartner }) {
   const [selectedMemory, setSelectedMemory] = useState(null);
   const [filter, setFilter] = useState('All');
-  const [isPlayingAudio, setIsPlayingAudio] = useState(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
 
   // Form State for Add Memory
   const [newTitle, setNewTitle] = useState('');
   const [newDesc, setNewDesc] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('Memories');
   const [selectedEmoji, setSelectedEmoji] = useState('🌟');
   
-  // Date is ALWAYS required (defaults to today's date YYYY-MM-DD)
   const [memoryDate, setMemoryDate] = useState(() => {
     const today = new Date();
     return today.toISOString().split('T')[0];
   });
 
-  // Time is optional via Checkbox
   const [includeTime, setIncludeTime] = useState(false);
   const [memoryTime, setMemoryTime] = useState('19:30');
 
   // Media attachments
-  const [isRecording, setIsRecording] = useState(false);
-  const [recordedVoice, setRecordedVoice] = useState(false);
-  const [attachedPhoto, setAttachedPhoto] = useState(null);
+  const [attachedPhoto, setAttachedPhoto] = useState('');
+  const [attachedVoiceUrl, setAttachedVoiceUrl] = useState('');
   const [attachedSong, setAttachedSong] = useState('');
   const [isClassifyingAI, setIsClassifyingAI] = useState(false);
 
-  // Memory Categories (Dynamic)
-  const [categories, setCategories] = useState(['All', 'Photos', 'Voice', 'Songs', 'Dates', 'Trips']);
+  // MediaRecorder Voice State
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingTime, setRecordingTime] = useState(0);
+  const [micPermissionError, setMicPermissionError] = useState('');
+  const mediaRecorderRef = useRef(null);
+  const audioChunksRef = useRef([]);
+  const timerRef = useRef(null);
 
-  const [memories, setMemories] = useState([
-    {
-      id: '1',
-      author: 'Raj',
-      title: 'Sunset Beach Walk',
-      category: 'Photos',
-      date: 'Aug 14, 2025 at 7:30 PM',
-      emoji: '🌅',
-      desc: 'Walking along the shore as the sky turned warm pink and orange. Held hands till the stars came out.',
-      bg: 'linear-gradient(135deg, #FF9E7D 0%, #FF6B8B 100%)',
-      hasVoice: true,
-      song: 'Yellow - Coldplay'
-    },
-    {
-      id: '2',
-      author: 'Naitik',
-      title: 'Stargazing Night',
-      category: 'Dates',
-      date: 'Oct 02, 2025',
-      emoji: '✨',
-      desc: 'Counted shooting stars from the hood of the car. Made three wishes together.',
-      bg: 'linear-gradient(135deg, #1C2036 0%, #3D2C2E 100%)',
-      hasVoice: false
-    },
-    {
-      id: '3',
-      author: 'Raj',
-      title: 'Autumn Woods Walk',
-      category: 'Trips',
-      date: 'Nov 18, 2025 at 4:15 PM',
-      emoji: '🍁',
-      desc: 'Crisp leaves crackling underfoot. Shared hot chocolate from the thermos.',
-      bg: 'linear-gradient(135deg, #E29578 0%, #8338EC 100%)',
-      hasVoice: true
-    },
-    {
-      id: '4',
-      author: 'Naitik',
-      title: 'First Concert Together',
-      category: 'Songs',
-      date: 'Dec 12, 2025',
-      emoji: '🎵',
-      desc: 'Sang along to Yellow under yellow confetti rain.',
-      bg: 'linear-gradient(135deg, #F4A261 0%, #2A9D8F 100%)',
-      hasVoice: false,
-      song: 'Yellow - Coldplay'
-    }
-  ]);
+  // Categories
+  const categories = ['All', 'Photos', 'Voice', 'Songs', 'Dates', 'Trips', 'Milestones'];
 
-  // Background Gemini AI Auto-Classification Engine
-  const classifyWithAI = async (title, desc) => {
-    setIsClassifyingAI(true);
+  // Filter real memories from gardenItems (zero fake data!)
+  const realMemories = gardenItems.filter(item => 
+    !item.category || item.category === 'Memories' || item.category === 'Photos' || item.category === 'Voice' || item.category === 'Songs' || item.category === 'Dates' || item.category === 'Trips' || item.category === 'Milestones' || item.category === 'Timeline'
+  );
 
-    if (GEMINI_API_KEY) {
-      try {
-        const response = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              contents: [{
-                parts: [{
-                  text: `Analyze this couple memory title: "${title}" and description: "${desc}". Return ONLY a valid JSON object with keys "category" (e.g. Photos, Voice, Songs, Dates, Trips, Milestones, Foodie) and "emoji" (single best storybook emoji).`
-                }]
-              }]
-            })
-          }
-        );
-        const data = await response.json();
-        const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-        const jsonMatch = text.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-          const parsed = JSON.parse(jsonMatch[0]);
-          if (parsed.category) setSelectedCategory(parsed.category);
-          if (parsed.emoji) setSelectedEmoji(parsed.emoji);
-          setIsClassifyingAI(false);
-          return;
-        }
-      } catch (err) {
-        console.log('Gemini API fallback:', err);
-      }
-    }
-
-    const combined = (title + ' ' + desc).toLowerCase();
-    let cat = 'Photos';
-    let em = '🌟';
-
-    if (combined.includes('beach') || combined.includes('sea') || combined.includes('sunset') || combined.includes('ocean')) {
-      cat = 'Trips'; em = '🌅';
-    } else if (combined.includes('music') || combined.includes('sing') || combined.includes('concert') || combined.includes('song')) {
-      cat = 'Songs'; em = '🎵';
-    } else if (combined.includes('dinner') || combined.includes('coffee') || combined.includes('food') || combined.includes('eat')) {
-      cat = 'Dates'; em = '☕';
-    } else if (combined.includes('star') || combined.includes('night') || combined.includes('camp')) {
-      cat = 'Dates'; em = '✨';
-    } else if (combined.includes('trip') || combined.includes('flight') || combined.includes('travel') || combined.includes('mountain')) {
-      cat = 'Trips'; em = '✈️';
-    } else if (recordedVoice) {
-      cat = 'Voice'; em = '🎙️';
-    }
-
-    setSelectedCategory(cat);
-    setSelectedEmoji(em);
-    setIsClassifyingAI(false);
-  };
-
-  const handleStartRecording = () => {
-    setIsRecording(true);
-    setTimeout(() => {
-      setIsRecording(false);
-      setRecordedVoice(true);
-      playChime();
-    }, 2500);
-  };
-
-  const handlePhotoUpload = (e) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const url = URL.createObjectURL(file);
-      setAttachedPhoto(url);
-    }
-  };
-
-  const handleAddMemorySubmit = () => {
-    if (!newTitle.trim() || !newDesc.trim()) return;
-
-    // Date formatting (Always included)
-    let formattedDate = '';
-    if (memoryDate) {
-      const [year, month, day] = memoryDate.split('-');
-      const d = new Date(year, month - 1, day);
-      formattedDate = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-      
-      // If time checkbox is checked, append time
-      if (includeTime && memoryTime) {
-        const [h, m] = memoryTime.split(':');
-        const timeObj = new Date();
-        timeObj.setHours(parseInt(h), parseInt(m));
-        const formattedTime = timeObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        formattedDate += ` at ${formattedTime}`;
-      }
-    } else {
-      formattedDate = 'Just now';
-    }
-
-    const cat = selectedCategory || 'Photos';
-    if (!categories.includes(cat)) {
-      setCategories([...categories, cat]);
-    }
-
-    const newMem = {
-      id: Date.now().toString(),
-      author: currentPartner,
-      title: newTitle,
-      category: cat,
-      date: formattedDate,
-      emoji: selectedEmoji,
-      desc: newDesc,
-      bg: attachedPhoto ? `url(${attachedPhoto}) center/cover` : 'linear-gradient(135deg, #FFB347 0%, #EE7B7B 100%)',
-      hasVoice: recordedVoice,
-      song: attachedSong
-    };
-
-    setMemories([newMem, ...memories]);
-    setIsAddModalOpen(false);
-    setNewTitle('');
-    setNewDesc('');
-    setRecordedVoice(false);
-    setAttachedPhoto(null);
-    setAttachedSong('');
-    setIncludeTime(false);
-  };
-
-  const handleToggleVoice = () => {
-    setIsPlayingAudio(true);
-    playVoiceNotePreview();
-    setTimeout(() => {
-      setIsPlayingAudio(false);
-    }, 1500);
-  };
-
-  const filteredMemories = memories.filter((m) => {
+  const filteredMemories = realMemories.filter((m) => {
     if (filter === 'All') return true;
-    if (filter === 'Voice') return m.hasVoice;
     return m.category === filter;
   });
 
+  // Start Live Audio Recording
+  const startVoiceRecording = async () => {
+    setMicPermissionError('');
+    audioChunksRef.current = [];
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = recorder;
+
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      recorder.onstop = () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          setAttachedVoiceUrl(reader.result);
+        };
+        reader.readAsDataURL(audioBlob);
+
+        stream.getTracks().forEach(track => track.stop());
+        clearInterval(timerRef.current);
+        setIsRecording(false);
+      };
+
+      recorder.start();
+      setIsRecording(true);
+      setRecordingTime(0);
+
+      timerRef.current = setInterval(() => {
+        setRecordingTime(prev => prev + 1);
+      }, 1000);
+    } catch (err) {
+      console.error('Microphone permission error:', err);
+      setMicPermissionError('Microphone permission denied or not supported on this device.');
+      setIsRecording(false);
+    }
+  };
+
+  const stopVoiceRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, []);
+
+  // Native Image File Upload Handler
+  const handlePhotoUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setAttachedPhoto(reader.result);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleSaveMemory = () => {
+    if (!newTitle.trim()) return;
+    playMagicBell();
+
+    const formattedDate = includeTime ? `${memoryDate} at ${memoryTime}` : memoryDate;
+
+    const newMemoryItem = {
+      id: Date.now().toString(),
+      author: currentPartner || 'Naitik',
+      type: 'flower',
+      category: selectedCategory || 'Memories',
+      emoji: selectedEmoji || '🌟',
+      title: newTitle.trim(),
+      text: newDesc.trim(),
+      date: formattedDate,
+      photoUrl: attachedPhoto,
+      voiceUrl: attachedVoiceUrl,
+      song: attachedSong
+    };
+
+    if (onAddGardenItem) {
+      onAddGardenItem(newMemoryItem);
+    }
+
+    // Reset Form
+    setNewTitle('');
+    setNewDesc('');
+    setAttachedPhoto('');
+    setAttachedVoiceUrl('');
+    setAttachedSong('');
+    setIsAddModalOpen(false);
+  };
+
+  const formatSecs = (secs) => {
+    const m = Math.floor(secs / 60);
+    const s = secs % 60;
+    return `${m}:${s < 10 ? '0' : ''}${s}`;
+  };
+
   return (
-    <div style={{
-      width: '100%',
-      height: '100%',
-      display: 'flex',
-      flexDirection: 'column',
-      position: 'relative',
-      backgroundColor: '#0F1428',
-      color: '#F5E6CC',
-      paddingBottom: '90px',
-      overflow: 'hidden'
-    }}>
-      {/* Background Twinkling Constellations */}
-      <div className="twinkle-star" style={{ top: '10%', left: '15%', width: '3px', height: '3px' }} />
-      <div className="twinkle-star" style={{ top: '22%', left: '80%', width: '4px', height: '4px', animationDelay: '1s' }} />
-      <div className="twinkle-star" style={{ top: '50%', left: '40%', width: '3px', height: '3px', animationDelay: '1.8s' }} />
-      <div className="twinkle-star" style={{ top: '75%', left: '85%', width: '2px', height: '2px', animationDelay: '0.4s' }} />
-
+    <div style={{ paddingBottom: '60px' }}>
       {/* Header */}
-      <div style={{ padding: '24px 20px 10px', zIndex: 10 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <Star size={22} fill="#FFB347" color="#FFB347" />
-          <h1 style={{
-            fontFamily: 'var(--font-serif)',
-            fontSize: '22px',
-            fontWeight: 600,
-            color: '#F5E6CC'
-          }}>
-            Memories
-          </h1>
-        </div>
-        <p style={{ fontSize: '12px', color: '#A3ADC2', marginTop: '2px' }}>
-          Shared constellation for Naitik & Raj
-        </p>
-
-        {/* Dynamic Category Filter Chips */}
-        <div style={{ display: 'flex', gap: '8px', marginTop: '14px', overflowX: 'auto' }}>
-          {categories.map((f) => (
-            <button
-              key={f}
-              onClick={() => setFilter(f)}
-              style={{
-                padding: '6px 14px',
-                borderRadius: '16px',
-                fontSize: '12px',
-                fontWeight: 600,
-                border: 'none',
-                backgroundColor: filter === f ? '#FFB347' : 'rgba(255,255,255,0.1)',
-                color: filter === f ? '#0F1428' : '#A3ADC2',
-                cursor: 'pointer',
-                whiteSpace: 'nowrap'
-              }}
-            >
-              {f}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Interactive Constellation Sky Grid */}
-      <div style={{ flex: 1, position: 'relative', padding: '10px 20px', zIndex: 5, overflowY: 'auto' }}>
-        <svg style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
-          <line x1="25%" y1="20%" x2="75%" y2="25%" stroke="rgba(255, 179, 71, 0.4)" strokeWidth="1.5" strokeDasharray="4 4" />
-          <line x1="75%" y1="25%" x2="30%" y2="60%" stroke="rgba(255, 179, 71, 0.4)" strokeWidth="1.5" strokeDasharray="4 4" />
-          <line x1="30%" y1="60%" x2="70%" y2="65%" stroke="rgba(255, 179, 71, 0.4)" strokeWidth="1.5" strokeDasharray="4 4" />
-        </svg>
-
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-          {filteredMemories.map((mem, idx) => (
-            <div
-              key={mem.id}
-              onClick={() => setSelectedMemory(mem)}
-              style={{
-                backgroundColor: '#FFF',
-                borderRadius: '12px',
-                padding: '8px 8px 14px',
-                boxShadow: '0 10px 25px rgba(0,0,0,0.4)',
-                transform: idx % 2 === 0 ? 'rotate(-3deg)' : 'rotate(3deg)',
-                cursor: 'pointer',
-                transition: 'transform 0.2s ease',
-                height: '175px',
-                display: 'flex',
-                flexDirection: 'column'
-              }}
-            >
-              <div style={{
-                flex: 1,
-                background: mem.bg,
-                borderRadius: '8px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: '36px',
-                position: 'relative',
-                overflow: 'hidden'
-              }}>
-                {mem.emoji}
-                {mem.hasVoice && (
-                  <span style={{
-                    position: 'absolute', top: '6px', right: '6px',
-                    backgroundColor: 'rgba(0,0,0,0.5)', padding: '4px', borderRadius: '50%'
-                  }}>
-                    <Volume2 size={12} color="#FFF" />
-                  </span>
-                )}
-              </div>
-              <div style={{ marginTop: '8px', textAlign: 'center' }}>
-                <h4 style={{ fontSize: '13px', fontWeight: 600, color: '#3D2C2E', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {mem.title}
-                </h4>
-                <span style={{ fontSize: '10px', color: '#EE7B7B', fontWeight: 600, display: 'block' }}>
-                  By {mem.author} • {mem.category}
-                </span>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Add Memory Modal (Date Always Shown, Time via Checkbox) */}
-      {isAddModalOpen && (
-        <div style={{
-          position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(8px)',
-          zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center',
-          padding: '16px'
-        }}>
-          <div style={{
-            backgroundColor: '#FDF8F2', borderRadius: '24px', padding: '20px 22px',
-            width: '100%', maxWidth: '330px', color: '#3D2C2E', maxHeight: '92%', overflowY: 'auto'
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
-              <h3 style={{ fontFamily: 'var(--font-serif)', fontSize: '18px', fontWeight: 600 }}>
-                Add Memory as {currentPartner} ⭐
-              </h3>
-              <button onClick={() => setIsAddModalOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
-                <X size={18} color="#3D2C2E" />
-              </button>
-            </div>
-
-            {/* Inputs */}
-            <input
-              type="text"
-              placeholder="Memory title..."
-              value={newTitle}
-              onChange={(e) => {
-                setNewTitle(e.target.value);
-                if (e.target.value.length > 3) classifyWithAI(e.target.value, newDesc);
-              }}
-              style={{
-                width: '100%', padding: '10px 12px', borderRadius: '12px',
-                border: '1px solid #E0D4C5', marginBottom: '10px',
-                fontFamily: 'var(--font-sans)', fontSize: '14px', outline: 'none'
-              }}
-            />
-
-            <textarea
-              placeholder="Describe this special moment..."
-              value={newDesc}
-              onChange={(e) => {
-                setNewDesc(e.target.value);
-                if (newTitle.length > 3) classifyWithAI(newTitle, e.target.value);
-              }}
-              rows={3}
-              style={{
-                width: '100%', padding: '10px 12px', borderRadius: '12px',
-                border: '1px solid #E0D4C5', marginBottom: '10px',
-                fontFamily: 'var(--font-sans)', fontSize: '14px', outline: 'none',
-                resize: 'none'
-              }}
-            />
-
-            {/* AI Classification Preview */}
-            <div style={{
-              backgroundColor: '#FFF9F4', padding: '10px 12px', borderRadius: '14px',
-              border: '1px solid #E0D4C5', marginBottom: '12px'
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                <span style={{ fontSize: '11px', fontWeight: 700, color: '#8C7A7C', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <Sparkles size={12} color="#FFB347" /> AI CLASSIFICATION & COVER EMOJI
-                </span>
-                {isClassifyingAI && <span style={{ fontSize: '10px', color: '#EE7B7B' }}>Analyzing...</span>}
-              </div>
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <div style={{
-                  fontSize: '28px', backgroundColor: '#FFF', padding: '4px 10px',
-                  borderRadius: '12px', border: '1px solid #E0D4C5'
-                }}>
-                  {selectedEmoji}
-                </div>
-                <div style={{ flex: 1 }}>
-                  <span style={{ fontSize: '11px', color: '#3D2C2E', fontWeight: 600 }}>Category: {selectedCategory || 'Photos'}</span>
-                  <div style={{ display: 'flex', gap: '4px', marginTop: '4px', overflowX: 'auto' }}>
-                    {['🌅', '✨', '☕', '🎵', '⛺', '✈️', '🕯️', '🌧️'].map((em) => (
-                      <button
-                        key={em}
-                        type="button"
-                        onClick={() => setSelectedEmoji(em)}
-                        style={{
-                          fontSize: '16px', background: 'none', border: 'none', cursor: 'pointer'
-                        }}
-                      >
-                        {em}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* DATE (Always Shown) & TIME (Checkbox Toggle) */}
-            <div style={{ marginBottom: '14px' }}>
-              <label style={{ fontSize: '11px', fontWeight: 700, color: '#8C7A7C', display: 'block', marginBottom: '4px' }}>
-                MEMORY DATE 📅
-              </label>
-              <input
-                type="date"
-                value={memoryDate}
-                onChange={(e) => setMemoryDate(e.target.value)}
-                style={{
-                  width: '100%', padding: '8px 10px', borderRadius: '12px',
-                  border: '1px solid #E0D4C5', outline: 'none', fontSize: '13px',
-                  backgroundColor: '#FFF', marginBottom: '10px'
-                }}
-              />
-
-              {/* Time Checkbox Toggle */}
-              <div
-                onClick={() => setIncludeTime(!includeTime)}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer',
-                  fontSize: '12px', fontWeight: 600, color: '#3D2C2E'
-                }}
-              >
-                {includeTime ? (
-                  <CheckSquare size={16} color="var(--brand-primary)" />
-                ) : (
-                  <Square size={16} color="#8C7A7C" />
-                )}
-                <span>Include specific time ⏰</span>
-              </div>
-
-              {includeTime && (
-                <div style={{ marginTop: '8px' }}>
-                  <input
-                    type="time"
-                    value={memoryTime}
-                    onChange={(e) => setMemoryTime(e.target.value)}
-                    style={{
-                      width: '100%', padding: '8px 10px', borderRadius: '12px',
-                      border: '1px solid #E0D4C5', outline: 'none', fontSize: '13px',
-                      backgroundColor: '#FFF'
-                    }}
-                  />
-                </div>
-              )}
-            </div>
-
-            {/* Media Attachments */}
-            <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
-              <button
-                type="button"
-                onClick={handleStartRecording}
-                disabled={isRecording}
-                style={{
-                  flex: 1, padding: '8px', borderRadius: '12px',
-                  border: recordedVoice ? '2px solid #8AA982' : '1px solid #E0D4C5',
-                  backgroundColor: recordedVoice ? '#E2F0D9' : '#FFF',
-                  fontSize: '11px', fontWeight: 600, color: '#3D2C2E',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px',
-                  cursor: 'pointer'
-                }}
-              >
-                <Mic size={14} color={isRecording ? '#EE7B7B' : '#3D2C2E'} />
-                {isRecording ? 'Recording...' : recordedVoice ? 'Voice Attached ✓' : 'Record Voice'}
-              </button>
-
-              <label style={{
-                flex: 1, padding: '8px', borderRadius: '12px',
-                border: attachedPhoto ? '2px solid #8AA982' : '1px solid #E0D4C5',
-                backgroundColor: attachedPhoto ? '#E2F0D9' : '#FFF',
-                fontSize: '11px', fontWeight: 600, color: '#3D2C2E',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px',
-                cursor: 'pointer'
-              }}>
-                <ImageIcon size={14} />
-                {attachedPhoto ? 'Photo Attached ✓' : 'Attach Photo'}
-                <input type="file" accept="image/*" onChange={handlePhotoUpload} style={{ display: 'none' }} />
-              </label>
-            </div>
-
-            <button
-              onClick={handleAddMemorySubmit}
-              disabled={!newTitle.trim() || !newDesc.trim()}
-              style={{
-                width: '100%', height: '46px', borderRadius: '23px',
-                backgroundColor: 'var(--brand-primary)', border: 'none',
-                color: '#FFF', fontSize: '15px', fontWeight: 600, cursor: 'pointer',
-                boxShadow: 'var(--shadow-pink)'
-              }}
-            >
-              Add Memory to Constellation ✨
-            </button>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px' }}>
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Sparkles size={26} color="#EE7B7B" />
+            <h1 style={{ fontFamily: 'var(--font-serif)', fontSize: '28px', color: '#3D2C2E', fontWeight: 700 }}>
+              Our Memories 💕
+            </h1>
           </div>
+          <p style={{ fontSize: '13px', color: '#8C7A7C', marginTop: '2px' }}>
+            Moments, photos, voice notes & trips saved by Naitik & Raj
+          </p>
         </div>
-      )}
 
-      {/* Memory Expanded Modal */}
-      {selectedMemory && (
-        <div style={{
-          position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(8px)',
-          zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center',
-          padding: '20px'
-        }}>
-          <div style={{
-            backgroundColor: '#FFF', borderRadius: '16px', padding: '16px',
-            width: '100%', maxWidth: '310px', boxShadow: '0 15px 40px rgba(0,0,0,0.5)'
-          }}>
-            <div style={{
-              height: '180px', background: selectedMemory.bg, borderRadius: '12px',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '60px',
-              position: 'relative'
-            }}>
-              <button
-                onClick={() => setSelectedMemory(null)}
-                style={{
-                  position: 'absolute', top: '10px', right: '10px',
-                  width: '30px', height: '30px', borderRadius: '50%',
-                  backgroundColor: 'rgba(0,0,0,0.4)', border: 'none',
-                  color: '#FFF', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  cursor: 'pointer'
-                }}
-              >
-                <X size={16} />
-              </button>
-              {selectedMemory.emoji}
-            </div>
-
-            <div style={{ marginTop: '16px', color: '#3D2C2E' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                  <h3 style={{ fontFamily: 'var(--font-serif)', fontSize: '18px', fontWeight: 600 }}>
-                    {selectedMemory.title}
-                  </h3>
-                  <span style={{ fontSize: '11px', fontWeight: 700, color: '#EE7B7B' }}>
-                    Added by {selectedMemory.author || 'Partner'} • {selectedMemory.category}
-                  </span>
-                </div>
-              </div>
-
-              <span style={{ fontSize: '11px', color: '#8C7A7C', display: 'block', marginTop: '4px' }}>
-                📅 {selectedMemory.date}
-              </span>
-
-              <p style={{ fontSize: '13px', lineHeight: '1.4', marginTop: '8px', color: '#5C4033' }}>
-                "{selectedMemory.desc}"
-              </p>
-
-              {/* Voice Note Player */}
-              {selectedMemory.hasVoice && (
-                <div style={{
-                  marginTop: '14px',
-                  backgroundColor: '#F5E6CC',
-                  padding: '10px 14px',
-                  borderRadius: '16px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between'
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <button
-                      onClick={handleToggleVoice}
-                      style={{
-                        width: '32px', height: '32px', borderRadius: '50%',
-                        backgroundColor: '#3D2C2E', border: 'none', color: '#FFF',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      {isPlayingAudio ? <Pause size={14} /> : <Play size={14} />}
-                    </button>
-                    <span style={{ fontSize: '12px', fontWeight: 600, color: '#3D2C2E' }}>
-                      {selectedMemory.author}'s Voice (0:14)
-                    </span>
-                  </div>
-                  <div style={{ display: 'flex', gap: '2px', alignItems: 'center' }}>
-                    {[12, 20, 16, 24, 14, 22, 18, 10].map((h, i) => (
-                      <div
-                        key={i}
-                        style={{
-                          width: '3px',
-                          height: `${isPlayingAudio ? Math.random() * 20 + 8 : h}px`,
-                          backgroundColor: '#3D2C2E',
-                          borderRadius: '2px',
-                          transition: 'height 0.15s ease'
-                        }}
-                      />
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Floating Add Memory Action Button */}
-      <div style={{ padding: '0 20px 10px', zIndex: 10, display: 'flex', justifyContent: 'center' }}>
         <button
           onClick={() => setIsAddModalOpen(true)}
           style={{
-            padding: '12px 24px', borderRadius: '24px',
-            backgroundColor: 'rgba(23, 29, 59, 0.85)',
-            border: '1px solid rgba(255, 179, 71, 0.4)',
-            color: '#FFB347', fontSize: '14px', fontWeight: 600,
+            padding: '10px 20px', borderRadius: '20px',
+            backgroundColor: 'var(--brand-primary)', border: 'none',
+            color: '#FFF', fontSize: '13px', fontWeight: 600,
             display: 'flex', alignItems: 'center', gap: '6px',
-            cursor: 'pointer', boxShadow: 'var(--shadow-glow)'
+            cursor: 'pointer', boxShadow: '0 4px 14px rgba(238,123,123,0.3)'
           }}
         >
-          <Plus size={16} /> Add Memory as {currentPartner}
+          <Plus size={16} /> Add New Memory
         </button>
       </div>
+
+      {/* Category Filter Tabs */}
+      <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '8px', marginBottom: '20px' }}>
+        {categories.map((cat) => (
+          <button
+            key={cat}
+            onClick={() => setFilter(cat)}
+            style={{
+              padding: '8px 16px', borderRadius: '18px',
+              border: 'none',
+              backgroundColor: filter === cat ? '#3D2C2E' : '#FFF9F4',
+              color: filter === cat ? '#FFF' : '#8C7A7C',
+              fontSize: '12px', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap'
+            }}
+          >
+            {cat} ({cat === 'All' ? realMemories.length : realMemories.filter(m => m.category === cat).length})
+          </button>
+        ))}
+      </div>
+
+      {/* Memories Polaroid Grid */}
+      {filteredMemories.length === 0 ? (
+        <div style={{
+          backgroundColor: '#FFF9F4',
+          borderRadius: '24px',
+          padding: '40px',
+          textAlign: 'center',
+          border: '1px dashed #EE7B7B'
+        }}>
+          <span style={{ fontSize: '36px' }}>📸</span>
+          <h3 style={{ fontFamily: 'var(--font-serif)', fontSize: '18px', color: '#3D2C2E', marginTop: '10px' }}>
+            No memories saved in this category
+          </h3>
+          <p style={{ fontSize: '13px', color: '#8C7A7C', marginTop: '4px' }}>
+            Click "+ Add New Memory" to record photos, voice notes, or trip memories!
+          </p>
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '20px' }}>
+          {filteredMemories.map((m) => (
+            <div
+              key={m.id}
+              onClick={() => setSelectedMemory(m)}
+              style={{
+                backgroundColor: '#FFF',
+                borderRadius: '20px',
+                padding: '16px',
+                border: '1px solid #E0D4C5',
+                boxShadow: 'var(--shadow-sm)',
+                cursor: 'pointer',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'space-between',
+                position: 'relative'
+              }}
+            >
+              <div>
+                {/* Photo or Emoji Hero */}
+                {m.photoUrl ? (
+                  <div style={{ width: '100%', height: '160px', borderRadius: '14px', overflow: 'hidden', marginBottom: '12px' }}>
+                    <img src={m.photoUrl} alt={m.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  </div>
+                ) : (
+                  <div style={{
+                    width: '100%', height: '120px', borderRadius: '14px',
+                    backgroundColor: '#FFF7F0', display: 'flex', alignItems: 'center',
+                    justifyContent: 'center', fontSize: '42px', marginBottom: '12px'
+                  }}>
+                    {m.emoji || '📸'}
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                  <span style={{ fontSize: '10px', color: '#EE7B7B', fontWeight: 700, backgroundColor: '#FFF0F0', padding: '2px 8px', borderRadius: '8px' }}>
+                    {m.category || 'Memories'}
+                  </span>
+                  <span style={{ fontSize: '10px', color: '#8C7A7C' }}>
+                    {m.date || 'Recently'}
+                  </span>
+                </div>
+
+                <h3 style={{ fontFamily: 'var(--font-serif)', fontSize: '16px', fontWeight: 700, color: '#3D2C2E' }}>
+                  {m.title}
+                </h3>
+
+                {m.text && (
+                  <p style={{ fontSize: '12px', color: '#6A5658', marginTop: '4px', lineHeight: 1.35, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                    "{m.text}"
+                  </p>
+                )}
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '12px', paddingTop: '10px', borderTop: '1px solid #F0E4D8' }}>
+                <span style={{ fontSize: '11px', color: '#EE7B7B', fontWeight: 600 }}>
+                  Saved by {m.author}
+                </span>
+
+                {onDeleteGardenItem && m.author === currentPartner && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDeleteGardenItem(m.id);
+                    }}
+                    title="Delete Memory"
+                    style={{ backgroundColor: '#FDE8E8', border: 'none', borderRadius: '8px', padding: '4px 8px', color: '#EE7B7B', cursor: 'pointer' }}
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* View Selected Memory Modal */}
+      {selectedMemory && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(15, 20, 40, 0.75)', backdropFilter: 'blur(8px)',
+          zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px'
+        }}>
+          <div style={{
+            backgroundColor: '#FFF', borderRadius: '28px', padding: '28px',
+            width: '100%', maxWidth: '480px', maxHeight: '85vh', overflowY: 'auto',
+            boxShadow: '0 20px 50px rgba(0,0,0,0.3)', position: 'relative'
+          }}>
+            <button
+              onClick={() => setSelectedMemory(null)}
+              style={{
+                position: 'absolute', top: '20px', right: '20px',
+                width: '34px', height: '34px', borderRadius: '50%',
+                backgroundColor: '#F0E4D8', border: 'none', color: '#3D2C2E',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer'
+              }}
+            >
+              <X size={16} />
+            </button>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+              <span style={{ fontSize: '28px' }}>{selectedMemory.emoji || '📸'}</span>
+              <div>
+                <h2 style={{ fontFamily: 'var(--font-serif)', fontSize: '22px', color: '#3D2C2E', fontWeight: 700 }}>
+                  {selectedMemory.title}
+                </h2>
+                <span style={{ fontSize: '11px', color: '#EE7B7B', fontWeight: 600 }}>
+                  Saved by {selectedMemory.author} • {selectedMemory.date}
+                </span>
+              </div>
+            </div>
+
+            {selectedMemory.photoUrl && (
+              <div style={{ width: '100%', borderRadius: '16px', overflow: 'hidden', margin: '14px 0', maxHeight: '280px' }}>
+                <img src={selectedMemory.photoUrl} alt={selectedMemory.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              </div>
+            )}
+
+            {selectedMemory.text && (
+              <p style={{ fontSize: '14px', color: '#3D2C2E', lineHeight: 1.45, fontStyle: 'italic', backgroundColor: '#FFF7F0', padding: '14px', borderRadius: '14px', marginBottom: '14px' }}>
+                "{selectedMemory.text}"
+              </p>
+            )}
+
+            {selectedMemory.voiceUrl && (
+              <div style={{ backgroundColor: '#FFF0F0', padding: '12px', borderRadius: '14px', border: '1px solid #EE7B7B', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <Volume2 size={20} color="#EE7B7B" />
+                <span style={{ fontSize: '12px', fontWeight: 600, color: '#3D2C2E' }}>Voice Recording:</span>
+                <audio src={selectedMemory.voiceUrl} controls style={{ height: '34px', flex: 1 }} />
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Add New Memory Modal */}
+      {isAddModalOpen && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(15, 20, 40, 0.75)', backdropFilter: 'blur(8px)',
+          zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px'
+        }}>
+          <div style={{
+            backgroundColor: '#FFF', borderRadius: '28px', padding: '28px',
+            width: '100%', maxWidth: '500px', maxHeight: '90vh', overflowY: 'auto',
+            boxShadow: '0 20px 50px rgba(0,0,0,0.3)', position: 'relative'
+          }}>
+            <button
+              onClick={() => setIsAddModalOpen(false)}
+              style={{
+                position: 'absolute', top: '20px', right: '20px',
+                width: '34px', height: '34px', borderRadius: '50%',
+                backgroundColor: '#F0E4D8', border: 'none', color: '#3D2C2E',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer'
+              }}
+            >
+              <X size={16} />
+            </button>
+
+            <h2 style={{ fontFamily: 'var(--font-serif)', fontSize: '22px', color: '#3D2C2E', marginBottom: '4px' }}>
+              Add New Memory 💕
+            </h2>
+            <p style={{ fontSize: '12px', color: '#8C7A7C', marginBottom: '20px' }}>
+              Save a special memory, photo, or voice note to your shared world
+            </p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div>
+                <label style={{ fontSize: '12px', fontWeight: 700, color: '#3D2C2E', display: 'block', marginBottom: '6px' }}>
+                  Memory Title *
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Sunset Walk by the Lake"
+                  value={newTitle}
+                  onChange={(e) => setNewTitle(e.target.value)}
+                  style={{ width: '100%', padding: '10px 14px', borderRadius: '12px', border: '1px solid #E0D4C5', fontSize: '13px', outline: 'none', boxSizing: 'border-box' }}
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: '12px', fontWeight: 700, color: '#3D2C2E', display: 'block', marginBottom: '6px' }}>
+                  Category
+                </label>
+                <select
+                  value={selectedCategory}
+                  onChange={(e) => setSelectedCategory(e.target.value)}
+                  style={{ width: '100%', padding: '10px 14px', borderRadius: '12px', border: '1px solid #E0D4C5', fontSize: '13px', outline: 'none' }}
+                >
+                  {['Memories', 'Photos', 'Voice', 'Songs', 'Dates', 'Trips', 'Milestones'].map(c => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label style={{ fontSize: '12px', fontWeight: 700, color: '#3D2C2E', display: 'block', marginBottom: '6px' }}>
+                  Memory Date
+                </label>
+                <input
+                  type="date"
+                  value={memoryDate}
+                  onChange={(e) => setMemoryDate(e.target.value)}
+                  style={{ width: '100%', padding: '10px 14px', borderRadius: '12px', border: '1px solid #E0D4C5', fontSize: '13px', outline: 'none', boxSizing: 'border-box' }}
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: '12px', fontWeight: 700, color: '#3D2C2E', display: 'block', marginBottom: '6px' }}>
+                  Story / Details
+                </label>
+                <textarea
+                  rows={3}
+                  placeholder="What made this moment special..."
+                  value={newDesc}
+                  onChange={(e) => setNewDesc(e.target.value)}
+                  style={{ width: '100%', padding: '10px 14px', borderRadius: '12px', border: '1px solid #E0D4C5', fontSize: '13px', outline: 'none', boxSizing: 'border-box' }}
+                />
+              </div>
+
+              {/* Photo Upload Picker */}
+              <div>
+                <label style={{ fontSize: '12px', fontWeight: 700, color: '#3D2C2E', display: 'block', marginBottom: '6px' }}>
+                  📷 Attach Photo (Upload from Device)
+                </label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handlePhotoUpload}
+                  style={{ fontSize: '12px', color: '#3D2C2E' }}
+                />
+                {attachedPhoto && (
+                  <div style={{ marginTop: '8px', position: 'relative', width: '100px', height: '100px', borderRadius: '12px', overflow: 'hidden', border: '1px solid #EE7B7B' }}>
+                    <img src={attachedPhoto} alt="Memory Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    <button
+                      type="button"
+                      onClick={() => setAttachedPhoto('')}
+                      style={{ position: 'absolute', top: '4px', right: '4px', backgroundColor: 'rgba(0,0,0,0.6)', border: 'none', color: '#FFF', borderRadius: '50%', width: '22px', height: '22px', cursor: 'pointer' }}
+                    >
+                      ×
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Live MediaRecorder Voice Note */}
+              <div>
+                <label style={{ fontSize: '12px', fontWeight: 700, color: '#3D2C2E', display: 'block', marginBottom: '6px' }}>
+                  🎙️ Record Voice Note Live
+                </label>
+
+                {micPermissionError && (
+                  <p style={{ fontSize: '11px', color: '#E53935', marginBottom: '4px' }}>{micPermissionError}</p>
+                )}
+
+                {!isRecording && !attachedVoiceUrl && (
+                  <button
+                    type="button"
+                    onClick={startVoiceRecording}
+                    style={{
+                      padding: '8px 16px', borderRadius: '16px',
+                      backgroundColor: '#EE7B7B', border: 'none', color: '#FFF',
+                      fontSize: '12px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer'
+                    }}
+                  >
+                    <Mic size={14} /> Start Voice Recording
+                  </button>
+                )}
+
+                {isRecording && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', backgroundColor: '#FFF0F0', padding: '8px 12px', borderRadius: '12px', border: '1px solid #EE7B7B' }}>
+                    <div style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#E53935' }} />
+                    <span style={{ fontSize: '12px', fontWeight: 700, color: '#E53935' }}>
+                      Recording: {formatSecs(recordingTime)}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={stopVoiceRecording}
+                      style={{ padding: '4px 10px', borderRadius: '10px', backgroundColor: '#E53935', border: 'none', color: '#FFF', fontSize: '11px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
+                    >
+                      <Square size={10} /> Stop
+                    </button>
+                  </div>
+                )}
+
+                {attachedVoiceUrl && !isRecording && (
+                  <div style={{ marginTop: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <audio src={attachedVoiceUrl} controls style={{ height: '34px', flex: 1 }} />
+                    <button
+                      type="button"
+                      onClick={() => setAttachedVoiceUrl('')}
+                      style={{ padding: '4px 8px', borderRadius: '8px', backgroundColor: '#FDE8E8', border: 'none', color: '#EE7B7B', fontSize: '11px', cursor: 'pointer' }}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <button
+                onClick={handleSaveMemory}
+                style={{
+                  marginTop: '10px', width: '100%', height: '46px', borderRadius: '23px',
+                  backgroundColor: 'var(--brand-primary)', border: 'none', color: '#FFF',
+                  fontSize: '14px', fontWeight: 600, cursor: 'pointer', boxShadow: 'var(--shadow-pink)'
+                }}
+              >
+                Save Memory 💕
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
