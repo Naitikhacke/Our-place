@@ -65,25 +65,47 @@ export default function LettersScreen({
   const audioChunksRef = useRef([]);
   const timerRef = useRef(null);
 
+  const getSupportedMimeType = () => {
+    const types = [
+      'audio/webm;codecs=opus',
+      'audio/webm',
+      'audio/ogg;codecs=opus',
+      'audio/mp4',
+      'audio/aac',
+      ''
+    ];
+    for (const t of types) {
+      if (!t || (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t))) {
+        return t;
+      }
+    }
+    return '';
+  };
+
   const startVoiceRecording = async () => {
     setMicPermissionError('');
     audioChunksRef.current = [];
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream);
+      const mimeType = getSupportedMimeType();
+      const options = mimeType ? { mimeType } : undefined;
+      const recorder = new MediaRecorder(stream, options);
       mediaRecorderRef.current = recorder;
 
       recorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
+        if (event.data && event.data.size > 0) {
           audioChunksRef.current.push(event.data);
         }
       };
 
       recorder.onstop = () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        const finalMime = recorder.mimeType || 'audio/webm';
+        const audioBlob = new Blob(audioChunksRef.current, { type: finalMime });
         const reader = new FileReader();
         reader.onloadend = () => {
-          setVoiceNote(reader.result);
+          if (reader.result) {
+            setVoiceNote(reader.result);
+          }
         };
         reader.readAsDataURL(audioBlob);
 
@@ -92,7 +114,7 @@ export default function LettersScreen({
         setIsRecording(false);
       };
 
-      recorder.start();
+      recorder.start(100);
       setIsRecording(true);
       setRecordingTime(0);
 

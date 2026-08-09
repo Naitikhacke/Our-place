@@ -32,26 +32,48 @@ export default function TimelineView({ gardenItems = [], onAddGardenItem, onDele
     !item.category || item.category === 'Memories' || item.category === 'Timeline' || item.category === 'Milestones' || item.type === 'flower'
   );
 
+  const getSupportedMimeType = () => {
+    const types = [
+      'audio/webm;codecs=opus',
+      'audio/webm',
+      'audio/ogg;codecs=opus',
+      'audio/mp4',
+      'audio/aac',
+      ''
+    ];
+    for (const t of types) {
+      if (!t || (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t))) {
+        return t;
+      }
+    }
+    return '';
+  };
+
   // Start Live Audio Recording with browser microphone permission
   const startVoiceRecording = async () => {
     setMicPermissionError('');
     audioChunksRef.current = [];
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream);
+      const mimeType = getSupportedMimeType();
+      const options = mimeType ? { mimeType } : undefined;
+      const recorder = new MediaRecorder(stream, options);
       mediaRecorderRef.current = recorder;
 
       recorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
+        if (event.data && event.data.size > 0) {
           audioChunksRef.current.push(event.data);
         }
       };
 
       recorder.onstop = () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        const finalMime = recorder.mimeType || 'audio/webm';
+        const audioBlob = new Blob(audioChunksRef.current, { type: finalMime });
         const reader = new FileReader();
         reader.onloadend = () => {
-          setVoiceUrl(reader.result);
+          if (reader.result) {
+            setVoiceUrl(reader.result);
+          }
         };
         reader.readAsDataURL(audioBlob);
 
@@ -61,7 +83,7 @@ export default function TimelineView({ gardenItems = [], onAddGardenItem, onDele
         setIsRecording(false);
       };
 
-      recorder.start();
+      recorder.start(100);
       setIsRecording(true);
       setRecordingTime(0);
 
