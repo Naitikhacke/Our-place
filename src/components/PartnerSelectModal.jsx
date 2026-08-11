@@ -96,46 +96,22 @@ export default function PartnerSelectModal({
               Together for <strong>{relTime.totalDays} days</strong> ✨ • Who is entering right now?
             </p>
 
-            {/* CLOUD DATABASE SYNC BADGE */}
+            {/* REAL-TIME CLOUD SYNC BADGE */}
             <div style={{
-              backgroundColor: authUser ? '#E8F5E9' : '#FFF9F4',
-              border: authUser ? '1px solid #81C784' : '1px solid #E0D4C5',
+              backgroundColor: '#FFF9F4',
+              border: '1px solid #E0D4C5',
               borderRadius: '16px',
               padding: '10px 14px',
               marginBottom: '20px',
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'space-between'
+              justifyContent: 'center',
+              gap: '8px'
             }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', textAlign: 'left' }}>
-                <span style={{ fontSize: '16px' }}>{authUser ? '☁️' : '✨'}</span>
-                <div>
-                  <div style={{ fontSize: '11px', color: authUser ? '#2E7D32' : '#8C7A7C', fontWeight: 700 }}>
-                    {authUser ? 'SANCTUARY CLOUD SYNC ACTIVE' : 'PRIVATE SANCTUARY FOR NAITIK & RAJ'}
-                  </div>
-                  <div style={{ fontSize: '12px', fontWeight: 600, color: '#3D2C2E' }}>
-                    {authUser ? (authUser.email || 'Connected across all devices') : 'Sync live across all your devices'}
-                  </div>
-                </div>
-              </div>
-              {onGoogleSignIn && (
-                <button
-                  type="button"
-                  onClick={onGoogleSignIn}
-                  style={{
-                    padding: '6px 12px',
-                    borderRadius: '12px',
-                    backgroundColor: authUser ? '#E8F5E9' : '#FDE8E8',
-                    border: authUser ? '1px solid #4CAF50' : '1px solid #EE7B7B',
-                    color: authUser ? '#2E7D32' : '#EE7B7B',
-                    fontSize: '11px',
-                    fontWeight: 700,
-                    cursor: 'pointer'
-                  }}
-                >
-                  {authUser ? 'Cloud Connected ✓' : 'Pair Cloud Sync'}
-                </button>
-              )}
+              <span style={{ fontSize: '16px' }}>☁️</span>
+              <span style={{ fontSize: '12px', fontWeight: 700, color: '#3D2C2E' }}>
+                Live Cloud Database Sync Active • Naitik & Raj
+              </span>
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '24px' }}>

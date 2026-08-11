@@ -8,7 +8,7 @@ const SUPABASE_ANON_KEY = 'sb_publishable_Dw8Tv6Ht-Z_0yByF_FmwkQ_Uc8rFudY';
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-// Broadcast Channel for Instant Multi-Tab Local Fallback Sync
+// Broadcast Channel for Multi-Tab Local Instant Sync
 const broadcastSyncChannel = typeof window !== 'undefined' && window.BroadcastChannel ? new BroadcastChannel('our_place_live_sync') : null;
 
 export function broadcastLocalStateChange(type, data) {
@@ -16,17 +16,6 @@ export function broadcastLocalStateChange(type, data) {
     try {
       broadcastSyncChannel.postMessage({ type, data, timestamp: Date.now() });
     } catch (e) {}
-  }
-}
-
-// AUTOMATIC SANCTUARY SESSION MANAGEMENT FOR CROSS-DEVICE SYNC
-export async function ensureSanctuaryAuthSession() {
-  try {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session) return session;
-    return null;
-  } catch (err) {
-    return null;
   }
 }
 
@@ -58,12 +47,11 @@ export async function fetchHeartNotes() {
     const { data, error } = await supabase
       .from('heart_notes')
       .select('*')
-      .order('id', { ascending: false });
+      .order('created_at', { ascending: false });
 
-    const localCached = JSON.parse(localStorage.getItem('bu_local_heart_notes') || '[]');
-    if (error || !data) return localCached;
+    if (error || !data) return JSON.parse(localStorage.getItem('bu_local_heart_notes') || '[]');
 
-    const remoteNotes = data.map(n => {
+    const notes = data.map(n => {
       let parsedMeta = {};
       let actualText = n.text || '';
       if (typeof actualText === 'string' && actualText.startsWith('{')) {
@@ -81,45 +69,20 @@ export async function fetchHeartNotes() {
         mood: n.mood || 'happy',
         need: n.need || 'hug',
         status: n.status || 'unread',
-        seen_by: parsedMeta.seenBy || [n.author || 'Naitik'],
-        unlock_timestamp: parsedMeta.unlockTimestamp || null,
+        seen_by: parsedMeta.seenBy || (n.seen_by ? (Array.isArray(n.seen_by) ? n.seen_by : [n.seen_by]) : [n.author || 'Naitik']),
+        unlock_timestamp: parsedMeta.unlockTimestamp || n.unlock_timestamp || null,
         created_at: n.created_at
       };
     });
 
-    const merged = [...remoteNotes];
-    localCached.forEach(lc => {
-      if (!merged.some(m => String(m.id) === String(lc.id))) {
-        merged.push(lc);
-      }
-    });
-
-    localStorage.setItem('bu_local_heart_notes', JSON.stringify(merged));
-    return merged;
+    localStorage.setItem('bu_local_heart_notes', JSON.stringify(notes));
+    return notes;
   } catch (err) {
     return JSON.parse(localStorage.getItem('bu_local_heart_notes') || '[]');
   }
 }
 
 export async function sendHeartNoteToSupabase(note) {
-  const localCached = JSON.parse(localStorage.getItem('bu_local_heart_notes') || '[]');
-  const noteWithId = {
-    id: note.id || String(Date.now()),
-    author: note.author || 'Naitik',
-    recipient: note.recipient || 'Raj',
-    text: note.text,
-    mood: note.mood || 'happy',
-    need: note.need || 'hug',
-    status: note.status || 'unread',
-    seen_by: note.seenBy || [note.author || 'Naitik'],
-    unlock_timestamp: note.unlockTimestamp || null,
-    created_at: new Date().toISOString()
-  };
-
-  const updatedLocal = [noteWithId, ...localCached.filter(n => String(n.id) !== String(noteWithId.id))];
-  localStorage.setItem('bu_local_heart_notes', JSON.stringify(updatedLocal));
-  broadcastLocalStateChange('HEART_NOTES_UPDATED', updatedLocal);
-
   try {
     const textPayload = JSON.stringify({
       text: note.text,
@@ -127,39 +90,34 @@ export async function sendHeartNoteToSupabase(note) {
       unlockTimestamp: note.unlockTimestamp || null
     });
 
-    await supabase.from('heart_notes').insert([{
+    const { data } = await supabase.from('heart_notes').insert([{
       author: note.author || 'Naitik',
       recipient: note.recipient || 'Raj',
       text: textPayload,
       mood: note.mood || 'happy',
       need: note.need || 'hug',
       status: 'unread'
-    }]);
+    }]).select();
+
+    fetchHeartNotes();
+    return data;
   } catch (err) {
     console.log('Heart note insert note:', err);
   }
 }
 
 export async function updateHeartNoteSeenInSupabase(noteId, seenByArray) {
-  const localCached = JSON.parse(localStorage.getItem('bu_local_heart_notes') || '[]');
-  const updatedLocal = localCached.map(n => String(n.id) === String(noteId) ? { ...n, seen_by: seenByArray } : n);
-  localStorage.setItem('bu_local_heart_notes', JSON.stringify(updatedLocal));
-  broadcastLocalStateChange('HEART_NOTES_UPDATED', updatedLocal);
-
   try {
     const textPayload = JSON.stringify({ seenBy: seenByArray });
     await supabase.from('heart_notes').update({ text: textPayload }).eq('id', noteId);
+    fetchHeartNotes();
   } catch (err) {}
 }
 
 export async function deleteHeartNoteFromSupabase(noteId) {
-  const localCached = JSON.parse(localStorage.getItem('bu_local_heart_notes') || '[]');
-  const updatedLocal = localCached.filter(n => String(n.id) !== String(noteId));
-  localStorage.setItem('bu_local_heart_notes', JSON.stringify(updatedLocal));
-  broadcastLocalStateChange('HEART_NOTES_UPDATED', updatedLocal);
-
   try {
     await supabase.from('heart_notes').delete().eq('id', noteId);
+    fetchHeartNotes();
   } catch (err) {}
 }
 
@@ -191,12 +149,11 @@ export async function fetchGarden() {
     const { data, error } = await supabase
       .from('garden_items')
       .select('*')
-      .order('id', { ascending: false });
+      .order('created_at', { ascending: false });
 
-    const localCached = JSON.parse(localStorage.getItem('bu_local_garden_items') || '[]');
-    if (error || !data) return localCached;
+    if (error || !data) return JSON.parse(localStorage.getItem('bu_local_garden_items') || '[]');
 
-    const remoteGarden = data
+    const gardenItems = data
       .filter(g => g.category !== 'Letters' && g.category !== 'SanctuarySettings' && g.category !== 'Moods')
       .map(g => {
         let meta = {};
@@ -217,34 +174,19 @@ export async function fetchGarden() {
           text: textContent,
           date: meta.date || 'Recently',
           photoUrl: meta.photoUrl || '',
-          voiceUrl: meta.voiceUrl || ''
+          voiceUrl: meta.voiceUrl || '',
+          created_at: g.created_at
         };
       });
 
-    const merged = [...remoteGarden];
-    localCached.forEach(lc => {
-      if (!merged.some(m => String(m.id) === String(lc.id))) {
-        merged.push(lc);
-      }
-    });
-
-    localStorage.setItem('bu_local_garden_items', JSON.stringify(merged));
-    return merged;
+    localStorage.setItem('bu_local_garden_items', JSON.stringify(gardenItems));
+    return gardenItems;
   } catch (err) {
     return JSON.parse(localStorage.getItem('bu_local_garden_items') || '[]');
   }
 }
 
 export async function addGardenItemToSupabase(item) {
-  const localCached = JSON.parse(localStorage.getItem('bu_local_garden_items') || '[]');
-  const itemWithId = {
-    ...item,
-    id: item.id || String(Date.now())
-  };
-  const updatedLocal = [itemWithId, ...localCached.filter(i => String(i.id) !== String(itemWithId.id))];
-  localStorage.setItem('bu_local_garden_items', JSON.stringify(updatedLocal));
-  broadcastLocalStateChange('GARDEN_UPDATED', updatedLocal);
-
   try {
     const payload = JSON.stringify({
       text: item.text,
@@ -261,35 +203,32 @@ export async function addGardenItemToSupabase(item) {
       title: item.title || 'Memory',
       text: payload
     }]);
+
+    fetchGarden();
   } catch (err) {
     console.log('Add garden item note:', err);
   }
 }
 
 export async function deleteGardenItemFromSupabase(itemId) {
-  const localCached = JSON.parse(localStorage.getItem('bu_local_garden_items') || '[]');
-  const updatedLocal = localCached.filter(i => String(i.id) !== String(itemId));
-  localStorage.setItem('bu_local_garden_items', JSON.stringify(updatedLocal));
-  broadcastLocalStateChange('GARDEN_UPDATED', updatedLocal);
-
   try {
     await supabase.from('garden_items').delete().eq('id', itemId);
+    fetchGarden();
   } catch (err) {}
 }
 
-// 3. REAL-TIME LETTERS SUBSCRIPTION (STORED SAFELY IN GARDEN_ITEMS CATEGORY 'Letters')
+// 3. REAL-TIME LETTERS SUBSCRIPTION & WRITES
 export function subscribeToLetters(onLettersUpdated) {
   fetchLetters().then(onLettersUpdated);
 
   const channelId = 'letters-' + Math.random().toString(36).substring(2, 9);
   const channel = supabase
     .channel(channelId)
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_items' }, (payload) => {
-      if (payload && payload.new && payload.new.category === 'Letters') {
-        fetchLetters().then(onLettersUpdated);
-      } else {
-        fetchLetters().then(onLettersUpdated);
-      }
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'letters' }, () => {
+      fetchLetters().then(onLettersUpdated);
+    })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_items' }, () => {
+      fetchLetters().then(onLettersUpdated);
     })
     .subscribe();
 
@@ -306,16 +245,33 @@ export function subscribeToLetters(onLettersUpdated) {
 
 export async function fetchLetters() {
   try {
-    const { data, error } = await supabase
+    // 1. Fetch from letters table
+    const { data: lettersData } = await supabase
+      .from('letters')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    // 2. Fetch from garden_items fallback
+    const { data: gardenData } = await supabase
       .from('garden_items')
       .select('*')
       .eq('category', 'Letters')
-      .order('id', { ascending: false });
+      .order('created_at', { ascending: false });
 
-    const localCached = JSON.parse(localStorage.getItem('bu_local_letters') || '[]');
-    if (error || !data) return localCached;
+    const nativeLetters = (lettersData || []).map(l => ({
+      id: String(l.id),
+      author: l.author || 'Naitik',
+      recipient: l.recipient || 'Raj',
+      title: l.title || 'Untitled Letter',
+      body: l.body || '',
+      color: l.color || '#FFD9D9',
+      border: l.border || '#FFAAAA',
+      seen_by: l.seen_by ? (Array.isArray(l.seen_by) ? l.seen_by : [l.seen_by]) : [l.author || 'Naitik'],
+      unlock_timestamp: l.unlock_timestamp || null,
+      created_at: l.created_at
+    }));
 
-    const remoteLetters = data.map(l => {
+    const fallbackLetters = (gardenData || []).map(l => {
       let meta = {};
       let bodyText = l.text || '';
       if (typeof bodyText === 'string' && bodyText.startsWith('{')) {
@@ -324,7 +280,6 @@ export async function fetchLetters() {
           bodyText = meta.body || meta.text || bodyText;
         } catch (e) {}
       }
-
       return {
         id: String(l.id),
         author: l.author || 'Naitik',
@@ -339,44 +294,42 @@ export async function fetchLetters() {
       };
     });
 
-    const merged = [...remoteLetters];
-    localCached.forEach(lc => {
-      if (!merged.some(m => String(m.id) === String(lc.id))) {
-        merged.push(lc);
+    const combined = [...nativeLetters];
+    fallbackLetters.forEach(fl => {
+      if (!combined.some(c => String(c.id) === String(fl.id))) {
+        combined.push(fl);
       }
     });
 
-    localStorage.setItem('bu_local_letters', JSON.stringify(merged));
-    return merged;
+    localStorage.setItem('bu_local_letters', JSON.stringify(combined));
+    return combined;
   } catch (err) {
     return JSON.parse(localStorage.getItem('bu_local_letters') || '[]');
   }
 }
 
 export async function sendLetterToSupabase(letter) {
-  const localCached = JSON.parse(localStorage.getItem('bu_local_letters') || '[]');
-  const letterWithId = {
-    ...letter,
-    id: letter.id || String(Date.now())
-  };
-  const updatedLocal = [letterWithId, ...localCached.filter(l => String(l.id) !== String(letterWithId.id))];
-  localStorage.setItem('bu_local_letters', JSON.stringify(updatedLocal));
-  broadcastLocalStateChange('LETTERS_UPDATED', updatedLocal);
-
   try {
+    // Write directly to native letters table
+    await supabase.from('letters').insert([{
+      author: letter.author || 'Naitik',
+      recipient: letter.recipient || 'Raj',
+      title: letter.title || 'Untitled Letter',
+      body: letter.body || '',
+      color: letter.color || '#FFD9D9',
+      border: letter.border || '#FFAAAA',
+      seen_by: letter.seenBy || [letter.author || 'Naitik'],
+      unlock_timestamp: letter.unlockTimestamp ? new Date(letter.unlockTimestamp).toISOString() : null
+    }]);
+
+    // Also write to garden_items for legacy compatibility
     const payload = JSON.stringify({
       recipient: letter.recipient || 'Raj',
       body: letter.body,
       color: letter.color || '#FFD9D9',
       border: letter.border || '#FFAAAA',
       seenBy: letter.seenBy || [letter.author || 'Naitik'],
-      unlockTimestamp: letter.unlockTimestamp || null,
-      fontFamily: letter.fontFamily || 'Dancing Script',
-      mood: letter.mood || '💖 Romantic',
-      sticker: letter.sticker || '🌸 Rose',
-      photoUrl: letter.photoUrl || '',
-      voiceNote: letter.voiceNote || '',
-      songLink: letter.songLink || ''
+      unlockTimestamp: letter.unlockTimestamp || null
     });
 
     await supabase.from('garden_items').insert([{
@@ -387,36 +340,25 @@ export async function sendLetterToSupabase(letter) {
       title: letter.title || 'Untitled Letter',
       text: payload
     }]);
+
+    fetchLetters();
   } catch (err) {
     console.log('Send letter note:', err);
   }
 }
 
 export async function updateLetterSeenInSupabase(letterId, seenByArray) {
-  const localCached = JSON.parse(localStorage.getItem('bu_local_letters') || '[]');
-  const updatedLocal = localCached.map(l => String(l.id) === String(letterId) ? { ...l, seen_by: seenByArray } : l);
-  localStorage.setItem('bu_local_letters', JSON.stringify(updatedLocal));
-  broadcastLocalStateChange('LETTERS_UPDATED', updatedLocal);
-
   try {
-    const { data } = await supabase.from('garden_items').select('*').eq('id', letterId);
-    if (data && data[0]) {
-      let meta = {};
-      try { meta = JSON.parse(data[0].text); } catch (e) {}
-      meta.seenBy = seenByArray;
-      await supabase.from('garden_items').update({ text: JSON.stringify(meta) }).eq('id', letterId);
-    }
+    await supabase.from('letters').update({ seen_by: seenByArray }).eq('id', letterId);
+    fetchLetters();
   } catch (err) {}
 }
 
 export async function deleteLetterFromSupabase(letterId) {
-  const localCached = JSON.parse(localStorage.getItem('bu_local_letters') || '[]');
-  const updatedLocal = localCached.filter(l => String(l.id) !== String(letterId));
-  localStorage.setItem('bu_local_letters', JSON.stringify(updatedLocal));
-  broadcastLocalStateChange('LETTERS_UPDATED', updatedLocal);
-
   try {
+    await supabase.from('letters').delete().eq('id', letterId);
     await supabase.from('garden_items').delete().eq('id', letterId);
+    fetchLetters();
   } catch (err) {}
 }
 
@@ -441,7 +383,7 @@ export async function fetchPartnerMoods() {
       .from('garden_items')
       .select('*')
       .eq('category', 'Moods')
-      .order('id', { ascending: false });
+      .order('created_at', { ascending: false });
 
     const defaultNaitikEmoji = localStorage.getItem('bu_mood_Naitik') || '😊';
     const defaultNaitikNote = localStorage.getItem('bu_mood_note_Naitik') || '';
@@ -462,12 +404,12 @@ export async function fetchPartnerMoods() {
       Naitik: {
         emoji: naitikItem ? naitikItem.emoji : defaultNaitikEmoji,
         note: naitikItem ? (naitikItem.text && !naitikItem.text.startsWith('Feeling ') ? naitikItem.text : defaultNaitikNote) : defaultNaitikNote,
-        date: naitikItem ? (naitikItem.date || '') : ''
+        date: naitikItem ? (naitikItem.created_at || '') : ''
       },
       Raj: {
         emoji: rajItem ? rajItem.emoji : defaultRajEmoji,
         note: rajItem ? (rajItem.text && !rajItem.text.startsWith('Feeling ') ? rajItem.text : defaultRajNote) : defaultRajNote,
-        date: rajItem ? (rajItem.date || '') : ''
+        date: rajItem ? (rajItem.created_at || '') : ''
       }
     };
   } catch (err) {
@@ -490,6 +432,7 @@ export async function updatePartnerMoodInSupabase(partner, moodEmoji, moodNote =
       title: `${partner}'s mood: ${moodEmoji}`,
       text: moodNote || `Feeling ${moodEmoji}`
     }]);
+    fetchPartnerMoods();
   } catch (err) {}
 }
 
@@ -514,7 +457,7 @@ export async function fetchPlaylist() {
       .from('garden_items')
       .select('*')
       .eq('category', 'Playlist')
-      .order('id', { ascending: false });
+      .order('created_at', { ascending: false });
 
     if (error || !data) return [];
     return data;
@@ -533,46 +476,11 @@ export async function addSongToSupabase(song) {
       title: song.title,
       text: `${song.artist} • ${song.note || ''} | link:${song.link || ''}`
     }]);
+    fetchPlaylist();
   } catch (err) {}
 }
 
-// 6. GOOGLE AUTHENTICATION WITH FORCED ACCOUNT PICKER
-export async function signInWithGoogle() {
-  try {
-    const { data, error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        queryParams: {
-          prompt: 'select_account',
-          access_type: 'offline',
-        },
-        redirectTo: typeof window !== 'undefined' ? window.location.origin : undefined,
-      },
-    });
-    if (error) throw error;
-    return data;
-  } catch (err) {
-    console.error('Google Sign-In error:', err);
-    throw err;
-  }
-}
-
-export async function signOutFromSupabase() {
-  try {
-    await supabase.auth.signOut();
-  } catch (err) {
-    console.error('Sign out error:', err);
-  }
-}
-
-export function subscribeToAuthStatus(onAuthChanged) {
-  const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-    onAuthChanged(session?.user || null, session);
-  });
-  return () => subscription?.unsubscribe();
-}
-
-// 7. REAL-TIME SANCTUARY SETTINGS & PROFILE SYNC
+// 6. SANCTUARY SETTINGS & PROFILE REAL-TIME SYNC
 export function subscribeToSanctuarySettings(onSettingsUpdated) {
   fetchSanctuarySettings().then(onSettingsUpdated);
 
@@ -593,7 +501,7 @@ export async function fetchSanctuarySettings() {
       .from('garden_items')
       .select('*')
       .eq('category', 'SanctuarySettings')
-      .order('id', { ascending: false })
+      .order('created_at', { ascending: false })
       .limit(1);
 
     if (error || !data || data.length === 0) {
@@ -657,7 +565,39 @@ export async function updateSanctuarySettingsInSupabase(newSettings) {
       title: 'Sanctuary Settings Update',
       text: payload
     }]);
+
+    fetchSanctuarySettings();
   } catch (err) {
     console.log('Update settings error:', err);
   }
+}
+
+// 7. GOOGLE & AUTH HELPERS
+export async function signInWithGoogle() {
+  try {
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        queryParams: { prompt: 'select_account' },
+        redirectTo: typeof window !== 'undefined' ? window.location.origin : undefined,
+      },
+    });
+    if (error) throw error;
+    return data;
+  } catch (err) {
+    console.error('Google Sign-In error:', err);
+  }
+}
+
+export async function signOutFromSupabase() {
+  try {
+    await supabase.auth.signOut();
+  } catch (err) {}
+}
+
+export function subscribeToAuthStatus(onAuthChanged) {
+  const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    onAuthChanged(session?.user || null, session);
+  });
+  return () => subscription?.unsubscribe();
 }
