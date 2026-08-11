@@ -44,7 +44,7 @@ export default function App() {
   const [currentPartner, setCurrentPartner] = useState(() => {
     return localStorage.getItem('bu_current_partner') || 'Naitik';
   });
-  const [isPartnerSelectOpen, setIsPartnerSelectOpen] = useState(false);
+  const [isPartnerSelectOpen, setIsPartnerSelectOpen] = useState(true);
   const [theme, setTheme] = useState(() => localStorage.getItem('bu_active_theme') || getAutoTimeTheme());
 
   // Personalization & Real-Time Synced State
