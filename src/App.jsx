@@ -23,7 +23,12 @@ import {
   sendLetterToSupabase,
   deleteLetterFromSupabase,
   updateLetterSeenInSupabase,
-  subscribeToPartnerMoods
+  subscribeToPartnerMoods,
+  signInWithGoogle,
+  signOutFromSupabase,
+  subscribeToAuthStatus,
+  subscribeToSanctuarySettings,
+  updateSanctuarySettingsInSupabase
 } from './services/supabase';
 
 // Automatic Time-Based Theme Detector
@@ -40,13 +45,14 @@ export default function App() {
     return localStorage.getItem('bu_current_partner') || 'Naitik';
   });
   const [isPartnerSelectOpen, setIsPartnerSelectOpen] = useState(false);
-  const [theme, setTheme] = useState(() => getAutoTimeTheme());
+  const [theme, setTheme] = useState(() => localStorage.getItem('bu_active_theme') || getAutoTimeTheme());
 
-  // Personalization State
-  const [couplesNames, setCouplesNames] = useState({ partner1: 'Naitik', partner2: 'Raj' });
-  const [anniversaryDate, setAnniversaryDate] = useState('2024-03-24');
-  const [favoriteSong, setFavoriteSong] = useState('Perfect - Ed Sheeran');
+  // Personalization & Real-Time Synced State
+  const [couplesNames, setCouplesNames] = useState(() => localStorage.getItem('bu_couples_names') || 'Naitik & Raj');
+  const [anniversaryDate, setAnniversaryDate] = useState(() => localStorage.getItem('bu_anniversary_date') || '2024-03-24');
+  const [favoriteSong, setFavoriteSong] = useState(() => localStorage.getItem('bu_favorite_song') || 'Perfect - Ed Sheeran');
   const [isBiometricLocked, setIsBiometricLocked] = useState(false);
+  const [authUser, setAuthUser] = useState(null);
 
   // Modals
   const [isNewThoughtOpen, setIsNewThoughtOpen] = useState(false);
@@ -189,17 +195,67 @@ export default function App() {
       }
     });
 
+    const unsubSettings = subscribeToSanctuarySettings((remoteSettings) => {
+      if (remoteSettings) {
+        if (remoteSettings.couplesNames) setCouplesNames(remoteSettings.couplesNames);
+        if (remoteSettings.anniversaryDate) setAnniversaryDate(remoteSettings.anniversaryDate);
+        if (remoteSettings.favoriteSong) setFavoriteSong(remoteSettings.favoriteSong);
+        if (remoteSettings.theme && remoteSettings.theme !== '') setTheme(remoteSettings.theme);
+      }
+    });
+
+    const unsubAuth = subscribeToAuthStatus((user) => {
+      setAuthUser(user);
+    });
+
     return () => {
       if (unsubNotes) unsubNotes();
       if (unsubGarden) unsubGarden();
       if (unsubLetters) unsubLetters();
       if (unsubMoods) unsubMoods();
+      if (unsubSettings) unsubSettings();
+      if (unsubAuth) unsubAuth();
     };
   }, []);
 
   useEffect(() => {
     localStorage.setItem('bu_current_partner', currentPartner);
   }, [currentPartner]);
+
+  const handleUpdateTheme = (newTheme) => {
+    setTheme(newTheme);
+    localStorage.setItem('bu_active_theme', newTheme);
+    updateSanctuarySettingsInSupabase({ couplesNames, anniversaryDate, favoriteSong, theme: newTheme });
+  };
+
+  const handleUpdateNicknames = (newNames) => {
+    const nameStr = typeof newNames === 'string' ? newNames : (newNames.partner1 && newNames.partner2 ? `${newNames.partner1} & ${newNames.partner2}` : couplesNames);
+    setCouplesNames(nameStr);
+    updateSanctuarySettingsInSupabase({ couplesNames: nameStr, anniversaryDate, favoriteSong, theme });
+  };
+
+  const handleUpdateAnniversary = (newDate) => {
+    setAnniversaryDate(newDate);
+    updateSanctuarySettingsInSupabase({ couplesNames, anniversaryDate: newDate, favoriteSong, theme });
+  };
+
+  const handleUpdateFavoriteSong = (newSong) => {
+    setFavoriteSong(newSong);
+    updateSanctuarySettingsInSupabase({ couplesNames, anniversaryDate, favoriteSong: newSong, theme });
+  };
+
+  const handleGoogleSignIn = async () => {
+    try {
+      await signInWithGoogle();
+    } catch (e) {
+      console.error('Google Auth Failed:', e);
+    }
+  };
+
+  const handleSignOut = async () => {
+    await signOutFromSupabase();
+    setAuthUser(null);
+  };
 
   const handleSelectPartner = (partnerId, moodEmoji, moodNote) => {
     setCurrentPartner(partnerId);
@@ -327,6 +383,9 @@ export default function App() {
           partnerMoods={partnerMoods}
           onSelectPartner={handleSelectPartner}
           onClose={() => setIsPartnerSelectOpen(false)}
+          authUser={authUser}
+          onGoogleSignIn={handleGoogleSignIn}
+          onSignOut={handleSignOut}
         />
       )}
 
@@ -336,9 +395,10 @@ export default function App() {
         currentPartner={currentPartner}
         onOpenPartnerSelect={() => setIsPartnerSelectOpen(true)}
         theme={theme}
-        onSelectTheme={setTheme}
+        onSelectTheme={handleUpdateTheme}
         notesCount={unreadNotesCount}
         unreadLettersCount={unreadLettersCount}
+        authUser={authUser}
       />
 
       <main style={{
@@ -445,15 +505,18 @@ export default function App() {
         {activeTab === 'settings' && (
           <ProfileScreen
             theme={theme}
-            onSelectTheme={setTheme}
+            onSelectTheme={handleUpdateTheme}
             couplesNames={couplesNames}
-            onUpdateNicknames={setCouplesNames}
+            onUpdateNicknames={handleUpdateNicknames}
             anniversaryDate={anniversaryDate}
-            onUpdateAnniversary={setAnniversaryDate}
+            onUpdateAnniversary={handleUpdateAnniversary}
             favoriteSong={favoriteSong}
-            onUpdateFavoriteSong={setFavoriteSong}
+            onUpdateFavoriteSong={handleUpdateFavoriteSong}
             isBiometricLocked={isBiometricLocked}
             onToggleBiometric={() => setIsBiometricLocked(!isBiometricLocked)}
+            authUser={authUser}
+            onGoogleSignIn={handleGoogleSignIn}
+            onSignOut={handleSignOut}
           />
         )}
       </main>

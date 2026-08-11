@@ -52,6 +52,57 @@ class SupabaseService {
     }
   }
 
+  // Real-Time Sanctuary Settings Stream
+  static Stream<Map<String, dynamic>> get sanctuarySettingsStream {
+    return client
+        .from('garden_items')
+        .stream(primaryKey: ['id'])
+        .eq('category', 'SanctuarySettings')
+        .order('id', ascending: false)
+        .limit(1)
+        .map((data) {
+          if (data.isEmpty) return {};
+          final text = data.first['text'] as String? ?? '';
+          if (text.startsWith('{')) {
+            try {
+              return jsonDecode(text) as Map<String, dynamic>;
+            } catch (_) {}
+          }
+          return {};
+        });
+  }
+
+  static Future<void> updateSanctuarySettings(Map<String, dynamic> settings) async {
+    try {
+      await client.from('garden_items').insert({
+        'author': 'SanctuarySystem',
+        'type': 'settings',
+        'category': 'SanctuarySettings',
+        'emoji': '💍',
+        'title': 'Sanctuary Settings Update',
+        'text': jsonEncode({
+          ...settings,
+          'updatedAt': DateTime.now().toIso8601String(),
+        }),
+      });
+    } catch (e) {
+      debugPrint('Update settings Flutter error: $e');
+    }
+  }
+
+  // Google OAuth Authentication with forced account selector
+  static Future<bool> signInWithGoogle() async {
+    try {
+      return await client.auth.signInWithOAuth(
+        OAuthProvider.google,
+        queryParams: {'prompt': 'select_account', 'access_type': 'offline'},
+      );
+    } catch (e) {
+      debugPrint('Google Sign-In Flutter error: $e');
+      return false;
+    }
+  }
+
   // Gemini AI Auto-Classification Service for Flutter
   static Future<Map<String, String>> classifyWithGemini(String title, String text) async {
     try {

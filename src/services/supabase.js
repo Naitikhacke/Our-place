@@ -8,9 +8,32 @@ const SUPABASE_ANON_KEY = 'sb_publishable_Dw8Tv6Ht-Z_0yByF_FmwkQ_Uc8rFudY';
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+// AUTOMATIC SANCTUARY SESSION MANAGEMENT FOR CROSS-DEVICE SYNC
+export async function ensureSanctuaryAuthSession() {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session) return session;
+
+    const email = 'sanctuary.naitik.raj@ourplace.app';
+    const password = 'SanctuaryLove2026!';
+
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) {
+      const signUpRes = await supabase.auth.signUp({ email, password });
+      return signUpRes.data?.session || null;
+    }
+    return data.session;
+  } catch (err) {
+    console.log('Sanctuary auth session note:', err);
+    return null;
+  }
+}
+
 // 1. REAL-TIME HEART NOTES SUBSCRIPTION & DELETION
 export function subscribeToHeartNotes(onNotesUpdated) {
-  fetchHeartNotes().then(onNotesUpdated);
+  ensureSanctuaryAuthSession().then(() => {
+    fetchHeartNotes().then(onNotesUpdated);
+  });
 
   const channelId = 'heart-notes-' + Math.random().toString(36).substring(2, 9);
   const channel = supabase
@@ -29,7 +52,11 @@ export async function fetchHeartNotes() {
       .from('heart_notes')
       .select('*')
       .order('created_at', { ascending: false });
-    if (error) return [];
+    if (error) {
+      await ensureSanctuaryAuthSession();
+      const retry = await supabase.from('heart_notes').select('*').order('created_at', { ascending: false });
+      return retry.data || [];
+    }
     return data || [];
   } catch (err) {
     return [];
@@ -38,6 +65,7 @@ export async function fetchHeartNotes() {
 
 export async function sendHeartNoteToSupabase(note) {
   try {
+    await ensureSanctuaryAuthSession();
     const { data, error } = await supabase
       .from('heart_notes')
       .insert([{
@@ -74,7 +102,9 @@ export async function deleteHeartNoteFromSupabase(noteId) {
 
 // 2. REAL-TIME GARDEN & MEMORIES SUBSCRIPTION & DELETION
 export function subscribeToGarden(onGardenUpdated) {
-  fetchGarden().then(onGardenUpdated);
+  ensureSanctuaryAuthSession().then(() => {
+    fetchGarden().then(onGardenUpdated);
+  });
 
   const channelId = 'garden-' + Math.random().toString(36).substring(2, 9);
   const channel = supabase
@@ -90,7 +120,11 @@ export function subscribeToGarden(onGardenUpdated) {
 export async function fetchGarden() {
   try {
     const { data, error } = await supabase.from('garden_items').select('*').order('created_at', { ascending: false });
-    if (error) return [];
+    if (error) {
+      await ensureSanctuaryAuthSession();
+      const retry = await supabase.from('garden_items').select('*').order('created_at', { ascending: false });
+      return retry.data || [];
+    }
     return data || [];
   } catch (err) {
     return [];
@@ -99,6 +133,7 @@ export async function fetchGarden() {
 
 export async function addGardenItemToSupabase(item) {
   try {
+    await ensureSanctuaryAuthSession();
     await supabase.from('garden_items').insert([{
       author: item.author,
       type: item.type || 'flower',
@@ -117,6 +152,7 @@ export async function addGardenItemToSupabase(item) {
 
 export async function deleteGardenItemFromSupabase(itemId) {
   try {
+    await ensureSanctuaryAuthSession();
     await supabase.from('garden_items').delete().eq('id', itemId);
   } catch (err) {
     console.log('Supabase delete garden item error:', err);
@@ -125,7 +161,9 @@ export async function deleteGardenItemFromSupabase(itemId) {
 
 // 3. REAL-TIME LETTERS SUBSCRIPTION & DELETION
 export function subscribeToLetters(onLettersUpdated) {
-  fetchLetters().then(onLettersUpdated);
+  ensureSanctuaryAuthSession().then(() => {
+    fetchLetters().then(onLettersUpdated);
+  });
 
   const channelId = 'letters-' + Math.random().toString(36).substring(2, 9);
   const channel = supabase
@@ -141,7 +179,11 @@ export function subscribeToLetters(onLettersUpdated) {
 export async function fetchLetters() {
   try {
     const { data, error } = await supabase.from('letters').select('*').order('created_at', { ascending: false });
-    if (error) return [];
+    if (error) {
+      await ensureSanctuaryAuthSession();
+      const retry = await supabase.from('letters').select('*').order('created_at', { ascending: false });
+      return retry.data || [];
+    }
     return data || [];
   } catch (err) {
     return [];
@@ -150,6 +192,7 @@ export async function fetchLetters() {
 
 export async function sendLetterToSupabase(letter) {
   try {
+    await ensureSanctuaryAuthSession();
     await supabase.from('letters').insert([{
       author: letter.author,
       recipient: letter.recipient,
@@ -167,6 +210,7 @@ export async function sendLetterToSupabase(letter) {
 
 export async function updateLetterSeenInSupabase(letterId, seenByArray) {
   try {
+    await ensureSanctuaryAuthSession();
     await supabase.from('letters').update({ seen_by: seenByArray }).eq('id', letterId);
   } catch (err) {
     console.log('Supabase update letter seen error:', err);
@@ -175,6 +219,7 @@ export async function updateLetterSeenInSupabase(letterId, seenByArray) {
 
 export async function deleteLetterFromSupabase(letterId) {
   try {
+    await ensureSanctuaryAuthSession();
     await supabase.from('letters').delete().eq('id', letterId);
   } catch (err) {
     console.log('Supabase delete letter error:', err);
@@ -183,7 +228,9 @@ export async function deleteLetterFromSupabase(letterId) {
 
 // 4. REAL-TIME PARTNER MOODS SUBSCRIPTION
 export function subscribeToPartnerMoods(onMoodsUpdated) {
-  fetchPartnerMoods().then(onMoodsUpdated);
+  ensureSanctuaryAuthSession().then(() => {
+    fetchPartnerMoods().then(onMoodsUpdated);
+  });
 
   const channelId = 'moods-' + Math.random().toString(36).substring(2, 9);
   const channel = supabase
@@ -252,6 +299,7 @@ export async function updatePartnerMoodInSupabase(partner, moodEmoji, moodNote =
   localStorage.setItem(`bu_mood_note_${partner}`, moodNote);
   const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   try {
+    await ensureSanctuaryAuthSession();
     await supabase.from('garden_items').insert([{
       author: partner,
       type: 'mood',
@@ -311,3 +359,161 @@ export async function addSongToSupabase(song) {
     console.log('Supabase song insert error:', err);
   }
 }
+
+// 6. GOOGLE AUTHENTICATION WITH FORCED ACCOUNT PICKER
+export async function signInWithGoogle() {
+  try {
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        queryParams: {
+          prompt: 'select_account',
+          access_type: 'offline',
+        },
+        redirectTo: typeof window !== 'undefined' ? window.location.origin : undefined,
+      },
+    });
+    if (error) throw error;
+    return data;
+  } catch (err) {
+    console.error('Google Sign-In error:', err);
+    throw err;
+  }
+}
+
+export async function signOutFromSupabase() {
+  try {
+    await supabase.auth.signOut();
+  } catch (err) {
+    console.error('Sign out error:', err);
+  }
+}
+
+export function subscribeToAuthStatus(onAuthChanged) {
+  const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    onAuthChanged(session?.user || null, session);
+  });
+  return () => subscription?.unsubscribe();
+}
+
+// 7. REAL-TIME SANCTUARY SETTINGS & PROFILE SYNC
+export function subscribeToSanctuarySettings(onSettingsUpdated) {
+  ensureSanctuaryAuthSession().then(() => {
+    fetchSanctuarySettings().then(onSettingsUpdated);
+  });
+
+  const channelId = 'settings-' + Math.random().toString(36).substring(2, 9);
+  const channel = supabase
+    .channel(channelId)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_items' }, (payload) => {
+      if (payload && payload.new && payload.new.category === 'SanctuarySettings') {
+        fetchSanctuarySettings().then(onSettingsUpdated);
+      } else {
+        fetchSanctuarySettings().then(onSettingsUpdated);
+      }
+    })
+    .subscribe();
+
+  return () => supabase.removeChannel(channel);
+}
+
+export async function fetchSanctuarySettings() {
+  try {
+    const { data, error } = await supabase
+      .from('garden_items')
+      .select('*')
+      .eq('category', 'SanctuarySettings')
+      .order('id', { ascending: false })
+      .limit(1);
+
+    if (error) {
+      await ensureSanctuaryAuthSession();
+      const retry = await supabase.from('garden_items').select('*').eq('category', 'SanctuarySettings').order('id', { ascending: false }).limit(1);
+      if (!retry.data || retry.data.length === 0) {
+        return {
+          couplesNames: localStorage.getItem('bu_couples_names') || 'Naitik & Raj',
+          anniversaryDate: localStorage.getItem('bu_anniversary_date') || '2024-03-24',
+          favoriteSong: localStorage.getItem('bu_favorite_song') || 'Perfect - Ed Sheeran',
+          theme: localStorage.getItem('bu_active_theme') || ''
+        };
+      }
+      const row = retry.data[0];
+      let parsed = {};
+      if (row.text && row.text.startsWith('{')) {
+        try { parsed = JSON.parse(row.text); } catch (e) {}
+      }
+      return {
+        couplesNames: parsed.couplesNames || localStorage.getItem('bu_couples_names') || 'Naitik & Raj',
+        anniversaryDate: parsed.anniversaryDate || localStorage.getItem('bu_anniversary_date') || '2024-03-24',
+        favoriteSong: parsed.favoriteSong || localStorage.getItem('bu_favorite_song') || 'Perfect - Ed Sheeran',
+        theme: parsed.theme || localStorage.getItem('bu_active_theme') || ''
+      };
+    }
+
+    if (!data || data.length === 0) {
+      return {
+        couplesNames: localStorage.getItem('bu_couples_names') || 'Naitik & Raj',
+        anniversaryDate: localStorage.getItem('bu_anniversary_date') || '2024-03-24',
+        favoriteSong: localStorage.getItem('bu_favorite_song') || 'Perfect - Ed Sheeran',
+        theme: localStorage.getItem('bu_active_theme') || ''
+      };
+    }
+
+    const row = data[0];
+    let parsed = {};
+    if (row.text && row.text.startsWith('{')) {
+      try { parsed = JSON.parse(row.text); } catch (e) {}
+    }
+
+    const settings = {
+      couplesNames: parsed.couplesNames || localStorage.getItem('bu_couples_names') || 'Naitik & Raj',
+      anniversaryDate: parsed.anniversaryDate || localStorage.getItem('bu_anniversary_date') || '2024-03-24',
+      favoriteSong: parsed.favoriteSong || localStorage.getItem('bu_favorite_song') || 'Perfect - Ed Sheeran',
+      theme: parsed.theme || localStorage.getItem('bu_active_theme') || ''
+    };
+
+    if (settings.couplesNames) localStorage.setItem('bu_couples_names', settings.couplesNames);
+    if (settings.anniversaryDate) localStorage.setItem('bu_anniversary_date', settings.anniversaryDate);
+    if (settings.favoriteSong) localStorage.setItem('bu_favorite_song', settings.favoriteSong);
+    if (settings.theme) localStorage.setItem('bu_active_theme', settings.theme);
+
+    return settings;
+  } catch (err) {
+    return {
+      couplesNames: localStorage.getItem('bu_couples_names') || 'Naitik & Raj',
+      anniversaryDate: localStorage.getItem('bu_anniversary_date') || '2024-03-24',
+      favoriteSong: localStorage.getItem('bu_favorite_song') || 'Perfect - Ed Sheeran',
+      theme: localStorage.getItem('bu_active_theme') || ''
+    };
+  }
+}
+
+export async function updateSanctuarySettingsInSupabase(newSettings) {
+  if (newSettings.couplesNames) localStorage.setItem('bu_couples_names', newSettings.couplesNames);
+  if (newSettings.anniversaryDate) localStorage.setItem('bu_anniversary_date', newSettings.anniversaryDate);
+  if (newSettings.favoriteSong) localStorage.setItem('bu_favorite_song', newSettings.favoriteSong);
+  if (newSettings.theme) localStorage.setItem('bu_active_theme', newSettings.theme);
+
+  try {
+    await ensureSanctuaryAuthSession();
+    const payload = JSON.stringify({
+      couplesNames: newSettings.couplesNames,
+      anniversaryDate: newSettings.anniversaryDate,
+      favoriteSong: newSettings.favoriteSong,
+      theme: newSettings.theme,
+      updatedAt: new Date().toISOString()
+    });
+
+    await supabase.from('garden_items').insert([{
+      author: 'SanctuarySystem',
+      type: 'settings',
+      category: 'SanctuarySettings',
+      emoji: '💍',
+      title: 'Sanctuary Settings Update',
+      text: payload
+    }]);
+  } catch (err) {
+    console.log('Update settings error:', err);
+  }
+}
+
